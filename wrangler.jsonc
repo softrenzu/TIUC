@@ -8,5 +8,11 @@
       "database_name": "kubiaka-db",
       "database_id": "16fc5560-fb1f-4502-963b-ab906ad44112"
     }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "PHOTOS",
+      "bucket_name": "kubiaka-photos"
+    }
   ]
 }
