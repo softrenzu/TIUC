@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="ja">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>クビアカ通報 - 撮影テスト</title>
+<style>
+  body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 16px;
+         max-width: 520px; line-height: 1.6; color: #222; }
+  h1 { font-size: 18px; margin: 0 0 16px; }
+  button { padding: 12px 18px; font-size: 15px; border: 1px solid #888;
+           background: #fff; border-radius: 8px; cursor: pointer; }
+  button:disabled { opacity: .4; }
+  .card { border: 1px solid #ddd; border-radius: 10px; padding: 12px; margin: 12px 0; }
+  .card h2 { font-size: 14px; margin: 0 0 8px; color: #555; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  td { padding: 3px 0; vertical-align: top; }
+  td:first-child { color: #666; width: 42%; }
+  .mono { font-family: ui-monospace, monospace; }
+  .warn { color: #a33; }
+  .ok { color: #161; }
+  img { max-width: 100%; border-radius: 8px; display: block; }
+</style>
+<body>
+
+<h1>撮影テスト(送信はしません)</h1>
+
+<p>
+  <input id="file" type="file" accept="image/*" capture="environment">
+</p>
+<p>
+  <button id="relocate" disabled>現在地を取り直す</button>
+</p>
+
+<div id="status" class="card">写真を選ぶと解析します。</div>
+<div id="result"></div>
+<div id="preview"></div>
+
+<script>
+// ===================================================================
+// JIS X 0410 地域メッシュコード
+// ===================================================================
+function meshCodes(lat, lng) {
+  const p = Math.floor(lat * 60 / 40);
+  const a = lat * 60 - p * 40;
+  const q = Math.floor(a / 5);
+  const b = a - q * 5;
+  const r = Math.floor(b * 60 / 30);
+  const latRem = b * 60 - r * 30;                 // 0..30 秒
+
+  const u = Math.floor(lng) - 100;
+  const f = lng - Math.floor(lng);
+  const v = Math.floor(f * 60 / 7.5);
+  const g = f * 60 - v * 7.5;
+  const w = Math.floor(g * 60 / 45);
+  const lngRem = g * 60 - w * 45;                 // 0..45 秒
+
+  const mesh3 = `${p}${u}${q}${v}${r}${w}`;                              // 約1km
+  const q4 = (latRem >= 15 ? 2 : 0) + (lngRem >= 22.5 ? 1 : 0) + 1;
+  const mesh4 = `${mesh3}${q4}`;                                          // 約500m
+  const lat2 = latRem % 15, lng2 = lngRem % 22.5;
+  const q5 = (lat2 >= 7.5 ? 2 : 0) + (lng2 >= 11.25 ? 1 : 0) + 1;
+  const mesh5 = `${mesh4}${q5}`;                                          // 約250m
+  return { mesh3, mesh4, mesh5 };
+}
+
+// ===================================================================
+// EXIF 解析(依存ライブラリなし)
+//   先頭 128KB だけ読めば APP1 セグメントは足りる
+// ===================================================================
+const TYPE_SIZE = { 1:1, 2:1, 3:2, 4:4, 5:8, 7:1, 9:4, 10:8 };
+
+function readEntries(dv, tiff, ifdOffset, le) {
+  const out = {};
+  const n = dv.getUint16(ifdOffset, le);
+  for (let i = 0; i < n; i++) {
+    const e = ifdOffset + 2 + i * 12;
+    const tag   = dv.getUint16(e, le);
+    const type  = dv.getUint16(e + 2, le);
+    const count = dv.getUint32(e + 4, le);
+    const bytes = (TYPE_SIZE[type] || 1) * count;
+    const valOff = bytes > 4 ? tiff + dv.getUint32(e + 8, le) : e + 8;
+    out[tag] = { type, count, valOff };
+  }
+  return out;
+}
+
+function readValue(dv, entry, le) {
+  const { type, count, valOff } = entry;
+  if (type === 2) {
+    let s = '';
+    for (let i = 0; i < count; i++) {
+      const c = dv.getUint8(valOff + i);
+      if (c === 0) break;
+      s += String.fromCharCode(c);
+    }
+    return s;
+  }
+  if (type === 3) return dv.getUint16(valOff, le);
+  if (type === 4) return dv.getUint32(valOff, le);
+  if (type === 5 || type === 10) {
+    const arr = [];
+    for (let i = 0; i < count; i++) {
+      const o = valOff + i * 8;
+      const num = type === 5 ? dv.getUint32(o, le)     : dv.getInt32(o, le);
+      const den = type === 5 ? dv.getUint32(o + 4, le) : dv.getInt32(o + 4, le);
+      arr.push(den ? num / den : 0);
+    }
+    return count === 1 ? arr[0] : arr;
+  }
+  return null;
+}
+
+function parseExif(buffer) {
+  const dv = new DataView(buffer);
+  const out = {};
+  if (dv.byteLength < 4 || dv.getUint16(0) !== 0xffd8) return out;   // JPEG でない
+
+  let offset = 2, app1 = -1;
+  while (offset < dv.byteLength - 4) {
+    if (dv.getUint8(offset) !== 0xff) break;
+    const marker = dv.getUint8(offset + 1);
+    if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) {
+      offset += 2; continue;
+    }
+    if (marker === 0xda) break;                                       // 画像データ開始
+    const size = dv.getUint16(offset + 2);
+    if (marker === 0xe1) { app1 = offset + 4; break; }
+    offset += 2 + size;
+  }
+  if (app1 < 0 || dv.getUint32(app1) !== 0x45786966) return out;      // "Exif"
+
+  const tiff = app1 + 6;
+  const le = dv.getUint16(tiff) === 0x4949;
+  if (dv.getUint16(tiff + 2, le) !== 0x002a) return out;
+
+  const ifd0 = readEntries(dv, tiff, tiff + dv.getUint32(tiff + 4, le), le);
+  if (ifd0[0x0112]) out.orientation = readValue(dv, ifd0[0x0112], le);
+
+  if (ifd0[0x8769]) {
+    const sub = readEntries(dv, tiff, tiff + readValue(dv, ifd0[0x8769], le), le);
+    if (sub[0x9003]) {
+      const s = readValue(dv, sub[0x9003], le);                       // "YYYY:MM:DD hh:mm:ss"
+      const m = s.match(/^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+      if (m) out.observedAt = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+    }
+  }
+
+  if (ifd0[0x8825]) {
+    const gps = readEntries(dv, tiff, tiff + readValue(dv, ifd0[0x8825], le), le);
+    const latRef = gps[0x0001] ? readValue(dv, gps[0x0001], le) : null;
+    const latVal = gps[0x0002] ? readValue(dv, gps[0x0002], le) : null;
+    const lngRef = gps[0x0003] ? readValue(dv, gps[0x0003], le) : null;
+    const lngVal = gps[0x0004] ? readValue(dv, gps[0x0004], le) : null;
+    if (Array.isArray(latVal) && Array.isArray(lngVal)) {
+      const dms = (a) => a[0] + a[1] / 60 + a[2] / 3600;
+      out.lat = dms(latVal) * (latRef === 'S' ? -1 : 1);
+      out.lng = dms(lngVal) * (lngRef === 'W' ? -1 : 1);
+    }
+  }
+  return out;
+}
+
+// ===================================================================
+// 位置情報 / 距離
+// ===================================================================
+function getPosition() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) return reject(new Error('この端末では位置情報を利用できません'));
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true, timeout: 15000, maximumAge: 0
+    });
+  });
+}
+
+function distanceM(a, b) {
+  const R = 6371000, rad = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * rad, dLng = (b.lng - a.lng) * rad;
+  const s = Math.sin(dLat / 2) ** 2 +
+            Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
+  return Math.round(2 * R * Math.asin(Math.sqrt(s)));
+}
+
+// ===================================================================
+// リサイズ
+// ===================================================================
+async function resize(file, maxEdge, quality) {
+  let bmp;
+  try {
+    bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  } catch {
+    bmp = await createImageBitmap(file);
+  }
+  const scale = Math.min(1, maxEdge / Math.max(bmp.width, bmp.height));
+  const w = Math.round(bmp.width * scale);
+  const h = Math.round(bmp.height * scale);
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  canvas.getContext('2d').drawImage(bmp, 0, 0, w, h);
+  const srcW = bmp.width, srcH = bmp.height;
+  bmp.close?.();
+  const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', quality));
+  return { blob, w, h, srcW, srcH };
+}
+
+// ===================================================================
+// 画面
+// ===================================================================
+const $status  = document.getElementById('status');
+const $result  = document.getElementById('result');
+const $preview = document.getElementById('preview');
+const $relocate = document.getElementById('relocate');
+
+let lastExif = null;
+const kb = (n) => (n / 1024).toFixed(0) + ' KB';
+
+function row(k, v, cls) {
+  return `<tr><td>${k}</td><td class="${cls || ''}">${v}</td></tr>`;
+}
+
+async function locate(exif) {
+  let geo = null, geoErr = null;
+  try {
+    const pos = await getPosition();
+    geo = { lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy };
+  } catch (e) {
+    geoErr = e.message || String(e);
+  }
+
+  // EXIF を優先、無ければ Geolocation
+  const src = (exif && exif.lat != null) ? 'exif' : (geo ? 'geolocation' : null);
+  const pt  = src === 'exif' ? { lat: exif.lat, lng: exif.lng } : geo;
+
+  let html = '<div class="card"><h2>位置情報</h2><table>';
+  html += row('EXIFのGPS', exif && exif.lat != null
+    ? `<span class="mono">${exif.lat.toFixed(6)}, ${exif.lng.toFixed(6)}</span>`
+    : '<span class="warn">なし(端末が除去)</span>');
+  html += row('端末の現在地', geo
+    ? `<span class="mono">${geo.lat.toFixed(6)}, ${geo.lng.toFixed(6)}</span><br>誤差 約${Math.round(geo.acc)}m`
+    : `<span class="warn">取得失敗: ${geoErr}</span>`);
+
+  if (exif && exif.lat != null && geo) {
+    const d = distanceM(exif, geo);
+    html += row('2点の差', d > 300
+      ? `<span class="warn">${d} m(要確認)</span>`
+      : `<span class="ok">${d} m</span>`);
+  }
+
+  if (pt) {
+    const m = meshCodes(pt.lat, pt.lng);
+    html += row('採用した座標', `<span class="mono">${pt.lat.toFixed(6)}, ${pt.lng.toFixed(6)}</span>(${src})`);
+    html += row('mesh3 / 約1km', `<span class="mono">${m.mesh3}</span>`);
+    html += row('mesh4 / 約500m', `<span class="mono">${m.mesh4}</span>`);
+    html += row('mesh5 / 約250m', `<span class="mono">${m.mesh5}</span>`);
+  } else {
+    html += row('採用した座標', '<span class="warn">位置を特定できません</span>');
+  }
+  html += '</table></div>';
+  return html;
+}
+
+document.getElementById('file').addEventListener('change', async (ev) => {
+  const file = ev.target.files[0];
+  if (!file) return;
+  $result.innerHTML = '';
+  $preview.innerHTML = '';
+  $status.textContent = '解析中...';
+
+  const head = await file.slice(0, 131072).arrayBuffer();
+  const exif = parseExif(head);
+  lastExif = exif;
+
+  const full  = await resize(file, 1600, 0.82);
+  const thumb = await resize(file, 512, 0.75);
+
+  let html = '<div class="card"><h2>画像</h2><table>';
+  html += row('元ファイル', `${file.name || '(名称なし)'}<br>${file.type} / ${kb(file.size)}`);
+  html += row('元の寸法', `${full.srcW} × ${full.srcH}`);
+  html += row('本体用', `${full.w} × ${full.h} / ${kb(full.blob.size)}`);
+  html += row('AI判定用', `${thumb.w} × ${thumb.h} / ${kb(thumb.blob.size)}`);
+  html += row('圧縮率', `<span class="ok">${(file.size / full.blob.size).toFixed(1)} 分の1</span>`);
+  html += row('撮影日時', exif.observedAt ? exif.observedAt.toLocaleString('ja-JP') : '—');
+  html += row('EXIF Orientation', exif.orientation ?? '—');
+  html += '</table></div>';
+
+  html += await locate(exif);
+  $result.innerHTML = html;
+
+  const url = URL.createObjectURL(full.blob);
+  $preview.innerHTML = `<div class="card"><h2>リサイズ後のプレビュー</h2><img src="${url}"></div>`;
+
+  $status.textContent = '解析完了。まだ何も送信していません。';
+  $relocate.disabled = false;
+});
+
+$relocate.addEventListener('click', async () => {
+  $relocate.disabled = true;
+  const cards = $result.querySelectorAll('.card');
+  if (cards.length > 1) cards[1].outerHTML = await locate(lastExif);
+  $relocate.disabled = false;
+});
+</script>
+</body>
+</html>
