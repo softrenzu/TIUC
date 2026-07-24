@@ -1,5 +1,12 @@
 {
   "name": "kubiaka-report",
   "main": "src/index.js",
-  "compatibility_date": "2026-07-01"
+  "compatibility_date": "2026-07-01",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "kubiaka-db",
+      "database_id": "16fc5560-fb1f-4502-963b-ab906ad44112"
+    }
+  ]
 }
