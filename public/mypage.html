@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="ja">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>マイページ</title>
+<style>
+  :root { --line:#ddd; --muted:#666; --warn:#a33; --ok:#161; }
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, sans-serif; margin: 0 auto; padding: 16px;
+         max-width: 520px; line-height: 1.6; color: #222; }
+  h1 { font-size: 19px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 22px 0 8px; }
+  .lead { color: var(--muted); font-size: 13px; margin: 0 0 20px; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat { border: 1px solid var(--line); border-radius: 10px; padding: 12px; text-align: center; }
+  .stat .n { font-size: 22px; font-weight: 600; }
+  .stat .label { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .card { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+  .card .row1 { display: flex; justify-content: space-between; align-items: center; font-size: 13px; gap: 8px; }
+  .badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px;
+           border: 1px solid var(--line); white-space: nowrap; }
+  .badge.ok   { border-color: var(--ok); color: var(--ok); }
+  .badge.warn { border-color: var(--warn); color: var(--warn); }
+  .note { font-size: 12px; margin-top: 6px; background: #f2f6fb; border: 1px solid #cddbea;
+          border-radius: 8px; padding: 8px; }
+  .memo { font-size: 12px; margin-top: 6px; color: var(--muted); }
+  .ledger-row { display: flex; justify-content: space-between; align-items: baseline;
+                font-size: 13px; padding: 6px 0; border-bottom: 1px solid var(--line); gap: 8px; }
+  .ledger-row:last-child { border-bottom: 0; }
+  .ledger-note { font-size: 12px; color: var(--muted); }
+  .delta { font-weight: 600; flex: none; }
+  .delta.plus  { color: var(--ok); }
+  .delta.minus { color: var(--warn); }
+  .empty { color: var(--muted); font-size: 13px; padding: 12px 0; }
+  .status { font-size: 13px; color: var(--muted); }
+  .warn { color: var(--warn); }
+  .mono { font-family: ui-monospace, monospace; }
+</style>
+<body>
+
+<h1>マイページ</h1>
+<p class="lead">これまでの通報とポイントの履歴です。</p>
+
+<div class="stats" id="stats"></div>
+
+<h2>通報履歴</h2>
+<div id="reports"></div>
+
+<h2>ポイント履歴</h2>
+<div id="ledger"></div>
+
+<p class="status" id="page-status"></p>
+
+<script type="module">
+const $ = (id) => document.getElementById(id);
+
+// --- 通報者ID(index.html / map.html と同じキーで匿名・端末保存) --------
+let reporterId = localStorage.getItem('kubiaka_reporter_id');
+if (!reporterId) {
+  reporterId = crypto.randomUUID();
+  localStorage.setItem('kubiaka_reporter_id', reporterId);
+}
+
+// --- 表示ラベル(review.html / map.html と共通の語彙) -------------------
+const FINDING = { frass: 'フラス', adult_alive: '成虫(生)', adult_dead: '成虫(死)',
+                   exit_hole: '脱出孔', none: '異常なし' };
+const SPECIES = { sakura: 'サクラ', ume: 'ウメ', momo: 'モモ', sumomo: 'スモモ',
+                   other_rosaceae: 'その他バラ科', non_rosaceae: 'バラ科以外', unknown: '不明' };
+const STATUS_LABEL = {
+  queued: '判定待ち', auto_rejected: '自動除外', pending_review: '確認中',
+  provisional: '暫定表示中', confirmed: '被害確定', rejected: '該当なし', duplicate: '重複',
+};
+const STATUS_CLASS = {
+  confirmed: 'ok', rejected: 'warn', auto_rejected: 'warn', duplicate: 'warn',
+};
+const RESPONSE_LABEL = { scheduled: '対応予定', treating: '対応中', done: '対応済み' };
+const KIND_LABEL = {
+  submit: '通報受付', confirm_bonus: '確定ボーナス', new_mesh_bonus: '新エリアボーナス',
+  negative_survey: '異常なし報告', duplicate_penalty: '重複調整',
+  revoke: '取り消し', manual: '手動調整',
+};
+
+const jst = (t) => t ? new Date(t * 1000).toLocaleDateString('ja-JP',
+  { timeZone: 'Asia/Tokyo', year: 'numeric', month: 'numeric', day: 'numeric' }) : '—';
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+function renderStats(s) {
+  $('stats').innerHTML = `
+    <div class="stat"><div class="n">${s.points_total}</div><div class="label">合計ポイント</div></div>
+    <div class="stat"><div class="n">${s.submitted_count}</div><div class="label">通報数</div></div>
+    <div class="stat"><div class="n">${s.confirmed_count}</div><div class="label">被害確定</div></div>
+    <div class="stat"><div class="n">${s.rejected_count}</div><div class="label">該当なし</div></div>`;
+}
+
+function renderReports(items) {
+  if (!items.length) {
+    $('reports').innerHTML = '<p class="empty">まだ通報がありません。</p>';
+    return;
+  }
+  $('reports').innerHTML = items.map((r) => {
+    const badgeClass = STATUS_CLASS[r.status] || '';
+    const respLabel = r.response_status ? RESPONSE_LABEL[r.response_status] : null;
+    return `
+    <div class="card">
+      <div class="row1">
+        <span>${FINDING[r.finding] || r.finding} / ${SPECIES[r.tree_species] || '—'}</span>
+        <span class="badge ${badgeClass}">${STATUS_LABEL[r.status] || r.status}</span>
+      </div>
+      <div class="status">${jst(r.observed_at || r.created_at)}${respLabel ? ` ・ ${respLabel}` : ''}</div>
+      ${r.note ? `<div class="memo">${escapeHtml(r.note)}</div>` : ''}
+      ${r.response_note ? `<div class="note">${escapeHtml(r.response_note)}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderLedger(items) {
+  if (!items.length) {
+    $('ledger').innerHTML = '<p class="empty">まだポイント履歴がありません。</p>';
+    return;
+  }
+  $('ledger').innerHTML = items.map((e) => {
+    const sign = e.points > 0 ? '+' : '';
+    const cls = e.points > 0 ? 'plus' : (e.points < 0 ? 'minus' : '');
+    return `
+    <div class="ledger-row">
+      <span>${jst(e.created_at)} ${KIND_LABEL[e.kind] || e.kind}
+        ${e.note ? `<div class="ledger-note">${escapeHtml(e.note)}</div>` : ''}</span>
+      <span class="mono delta ${cls}">${sign}${e.points}</span>
+    </div>`;
+  }).join('');
+}
+
+async function main() {
+  $('page-status').textContent = '読み込み中...';
+  const res = await fetch(`/api/mypage?reporter_id=${reporterId}`);
+  const j = await res.json();
+  if (!j.ok) throw new Error(j.error || '取得に失敗しました');
+  $('page-status').textContent = '';
+  renderStats(j.summary);
+  renderReports(j.reports);
+  renderLedger(j.point_events);
+}
+
+main().catch((e) => {
+  $('page-status').innerHTML = `<span class="warn">${e.message}</span>`;
+});
+</script>
+</body>
+</html>

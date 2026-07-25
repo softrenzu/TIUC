@@ -557,6 +557,49 @@ async function createReaction(request, env) {
 }
 
 // =====================================================================
+// マイページ(通報者本人の履歴)
+//   nearbyCheck/createReaction と同じ信頼モデル: reporter_id を知っている
+//   ことのみを根拠に、その reporter_id の履歴を返す。写真は一切含めない
+//   (/img/ はレビュアー認証必須のまま。CLAUDE.md ルール1に例外は設けない)。
+// =====================================================================
+async function mypage(request, env) {
+  const url = new URL(request.url);
+  const reporterId = String(url.searchParams.get("reporter_id") || "");
+  if (!UUID_RE.test(reporterId)) return bad("通報者IDが不正です");
+
+  const [summary, reportsRes, eventsRes] = await Promise.all([
+    env.DB.prepare(
+      `SELECT points_total, submitted_count, confirmed_count, rejected_count
+         FROM reporters WHERE id = ?1`
+    ).bind(reporterId).first(),
+    env.DB.prepare(
+      `SELECT id, created_at, observed_at, finding, tree_species, note, status,
+              land_type, response_status, response_note
+         FROM reports
+        WHERE reporter_id = ?1
+        ORDER BY created_at DESC
+        LIMIT 100`
+    ).bind(reporterId).all(),
+    env.DB.prepare(
+      `SELECT kind, points, created_at, report_id, note
+         FROM point_events
+        WHERE reporter_id = ?1
+        ORDER BY created_at DESC
+        LIMIT 200`
+    ).bind(reporterId).all(),
+  ]);
+
+  return Response.json({
+    ok: true,
+    summary: summary ?? {
+      points_total: 0, submitted_count: 0, confirmed_count: 0, rejected_count: 0,
+    },
+    reports: reportsRes.results,
+    point_events: eventsRes.results,
+  });
+}
+
+// =====================================================================
 // ルーティング
 // =====================================================================
 export default {
@@ -583,6 +626,11 @@ export default {
       // --- スタンプ(seen_too / thanks) ---
       if (path === "/api/reactions" && request.method === "POST") {
         return await createReaction(request, env);
+      }
+
+      // --- マイページ(reporter_id の一致のみで閲覧可。/img/ は含めない) ---
+      if (path === "/api/mypage" && request.method === "GET") {
+        return await mypage(request, env);
       }
 
       // Secure 属性は HTTPS の時だけ付ける。
