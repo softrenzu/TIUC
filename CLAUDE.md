@@ -11,7 +11,10 @@
   Cloudflare の無料プランには非商用制限がなく、自治体連携時にも規約問題が出ないため。
 - Worker (`src/index.js`) が API と静的配信を兼ねる。フレームワークは未使用(素の Worker)。
 - フロントは `public/` 配下の素の HTML + ES モジュール。ビルド工程なし。
-  - `public/index.html` … 通報フォーム
+  - `public/index.html` … ランディングページ(通報する/マップ/マイページへの導線)
+  - `public/report.html` … 通報フォーム
+  - `public/map.html` … 公開マップ
+  - `public/mypage.html` … 通報者マイページ
   - `public/review.html` … レビュー画面
   - `public/mesh.js` … JIS X 0410 地域メッシュコード算出(クライアントとWorkerで**共有**)
   - `public/exif.js` … 依存ライブラリなしのEXIF解析

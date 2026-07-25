@@ -2,402 +2,49 @@
 <html lang="ja">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>クビアカツヤカミキリ 通報</title>
-<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
+<title>クビアカツヤカミキリ 通報アプリ</title>
 <style>
   :root { --line:#ddd; --muted:#666; --warn:#a33; --ok:#161; }
   * { box-sizing: border-box; }
   body { font-family: system-ui, -apple-system, sans-serif; margin: 0 auto; padding: 16px;
          max-width: 520px; line-height: 1.6; color: #222; }
-  h1 { font-size: 19px; margin: 0 0 4px; }
-  .lead { color: var(--muted); font-size: 13px; margin: 0 0 20px; }
-  fieldset { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin: 0 0 14px; }
-  legend { font-size: 13px; color: var(--muted); padding: 0 6px; }
-  .choices { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .choices label { border: 1px solid var(--line); border-radius: 8px; padding: 10px;
-                   text-align: center; font-size: 14px; cursor: pointer; position: relative; }
-  .choices input { position: absolute; opacity: 0; }
-  .choices label:has(input:checked) { border-color: #333; background: #f4f4f2; font-weight: 500; }
-  select, textarea, input[type=file] { width: 100%; font-size: 15px; padding: 8px;
-         border: 1px solid var(--line); border-radius: 8px; font-family: inherit; }
-  #submit { width: 100%; padding: 14px; font-size: 16px; border: 0; border-radius: 10px;
-            background: #1a5c3a; color: #fff; }
-  #submit:disabled { background: #bbb; }
-  .status { font-size: 13px; color: var(--muted); margin: 6px 0 0; }
-  .warn { color: var(--warn); }
-  .ok { color: var(--ok); }
-  .notice { background: #fdf3f3; border: 1px solid #e6c8c8; border-radius: 8px;
-            padding: 10px; font-size: 13px; margin-top: 10px; }
-  img.preview { max-width: 100%; border-radius: 8px; margin-top: 10px; display: block; }
-  table { width: 100%; font-size: 12px; border-collapse: collapse; }
-  td { padding: 2px 0; } td:first-child { color: var(--muted); width: 42%; }
-  .mono { font-family: ui-monospace, monospace; }
-  #map-toggle-p { font-size: 13px; margin: 8px 0 0; }
-  #map { height: 260px; border-radius: 8px; margin-top: 8px; border: 1px solid var(--line); }
-  #map-confirm { width: 100%; padding: 10px; font-size: 14px; margin-top: 8px;
-                 border: 1px solid var(--line); border-radius: 8px; background: #fff; }
-  #map-confirm:disabled { color: var(--muted); }
-  .info-notice { background: #f2f6fb; border: 1px solid #cddbea; border-radius: 8px;
-                 padding: 10px; font-size: 13px; margin-top: 10px; }
-  .info-notice .row { display: flex; gap: 8px; margin-top: 8px; }
-  .info-notice button { flex: 1; padding: 9px; font-size: 13px;
-                         border: 1px solid var(--line); border-radius: 8px; background: #fff; }
-  .info-notice button:disabled { color: var(--muted); }
+  h1 { font-size: 20px; margin: 0 0 8px; }
+  .lead { color: var(--muted); font-size: 14px; margin: 0 0 24px; }
+  .cards { display: flex; flex-direction: column; gap: 12px; }
+  .card { display: block; border: 1px solid var(--line); border-radius: 12px; padding: 16px;
+          text-decoration: none; color: inherit; }
+  .card:hover { border-color: #333; background: #f4f4f2; }
+  .card .title { font-size: 16px; font-weight: 600; margin: 0 0 4px; }
+  .card .desc { font-size: 13px; color: var(--muted); margin: 0; }
+  .card.primary { background: #1a5c3a; border-color: #1a5c3a; color: #fff; }
+  .card.primary .desc { color: #cfe3d8; }
+  .card.primary:hover { background: #164a30; }
+  footer { margin-top: 28px; font-size: 12px; color: var(--muted); }
 </style>
 <body>
 
-<h1>クビアカツヤカミキリ 通報</h1>
-<p class="lead">サクラ・ウメ・モモ・スモモなどの木で見つけたものを報告してください。
-  <a href="mypage.html">マイページ</a></p>
+<h1>クビアカツヤカミキリ 通報アプリ</h1>
+<p class="lead">
+  サクラ・ウメ・モモなどバラ科樹木の害虫「クビアカツヤカミキリ」の被害を、
+  スマホで撮影して通報できます。集まった情報は地図で公開され、行政の防除につながります。
+</p>
 
-<fieldset>
-  <legend>1. 何を見つけましたか</legend>
-  <div class="choices" id="finding">
-    <label><input type="radio" name="finding" value="frass">フラス(木くず状のフン)</label>
-    <label><input type="radio" name="finding" value="adult_alive">成虫(生きている)</label>
-    <label><input type="radio" name="finding" value="adult_dead">成虫(死んでいる)</label>
-    <label><input type="radio" name="finding" value="exit_hole">脱出孔</label>
-    <label><input type="radio" name="finding" value="none">見たが異常なし</label>
-  </div>
-  <div id="alive-notice" class="notice" hidden>
-    <strong>成虫を生きたまま持ち運ぶことは法律で禁止されています。</strong>
-    特定外来生物のため、その場で処分してください。
-  </div>
-  <p class="status" id="none-hint" hidden>
-    「異常なし」も貴重なデータです。どの木を調べたかが分かるよう、幹の根元を撮影してください。
-  </p>
-</fieldset>
+<div class="cards">
+  <a class="card primary" href="report.html">
+    <p class="title">通報する</p>
+    <p class="desc">フラス(木くず状のフン)や成虫を見つけたら、写真と場所を送ってください。</p>
+  </a>
+  <a class="card" href="map.html">
+    <p class="title">被害マップを見る</p>
+    <p class="desc">これまでの通報状況や、行政の対応状況を地図で確認できます。</p>
+  </a>
+  <a class="card" href="mypage.html">
+    <p class="title">マイページ</p>
+    <p class="desc">自分が送った通報の履歴と、獲得したポイントを確認できます。</p>
+  </a>
+</div>
 
-<fieldset>
-  <legend>2. 木の種類</legend>
-  <select id="species">
-    <option value="unknown">わからない</option>
-    <option value="sakura">サクラ</option>
-    <option value="ume">ウメ</option>
-    <option value="momo">モモ</option>
-    <option value="sumomo">スモモ</option>
-    <option value="other_rosaceae">その他のバラ科</option>
-    <option value="non_rosaceae">バラ科以外</option>
-  </select>
-</fieldset>
+<footer>ログイン不要・匿名で利用できます。</footer>
 
-<fieldset>
-  <legend>3. 写真(幹の根元が写るように)</legend>
-  <input id="file" type="file" accept="image/*" capture="environment">
-  <p class="status" id="img-status">未選択</p>
-  <div id="preview"></div>
-</fieldset>
-
-<fieldset>
-  <legend>4. 位置情報</legend>
-  <p class="status" id="loc-status">写真を選ぶと自動で取得します。</p>
-  <table id="loc-detail"></table>
-  <p class="status" id="map-toggle-p"><a href="#" id="map-toggle">地図で場所を指定する</a></p>
-  <div id="map-fallback" hidden>
-    <div id="map"></div>
-    <button id="map-confirm" type="button" disabled>この位置に決定</button>
-  </div>
-  <div id="nearby-notice" class="info-notice" hidden>
-    <p style="margin:0">近くで最近、別の方から報告がありました。同じ発見の可能性があります。</p>
-    <div class="row">
-      <button id="nearby-yes" type="button">はい、私も見ました</button>
-      <button id="nearby-dismiss" type="button">いいえ、違います</button>
-    </div>
-    <p class="status" id="nearby-status"></p>
-  </div>
-</fieldset>
-
-<fieldset>
-  <legend>5. メモ(任意)</legend>
-  <textarea id="note" rows="2" maxlength="500" placeholder="場所の目印など"></textarea>
-</fieldset>
-
-<button id="submit" disabled>送信する</button>
-<p class="status" id="submit-status"></p>
-
-<script type="module">
-import { meshCodes } from './mesh.js';
-import { parseExif } from './exif.js';
-
-// --- 通報者ID(匿名。端末に保存されるだけ) ---------------------------
-let reporterId = localStorage.getItem('kubiaka_reporter_id');
-if (!reporterId) {
-  reporterId = crypto.randomUUID();
-  localStorage.setItem('kubiaka_reporter_id', reporterId);
-}
-
-const $ = (id) => document.getElementById(id);
-const state = { full: null, thumb: null, exif: null, geo: null, point: null };
-
-// --- 位置情報 ---------------------------------------------------------
-function getPosition() {
-  return new Promise((res, rej) => {
-    if (!navigator.geolocation) return rej(new Error('位置情報を利用できません'));
-    navigator.geolocation.getCurrentPosition(res, rej,
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
-  });
-}
-
-function distanceM(a, b) {
-  const R = 6371000, rad = Math.PI / 180;
-  const dLat = (b.lat - a.lat) * rad, dLng = (b.lng - a.lng) * rad;
-  const s = Math.sin(dLat / 2) ** 2 +
-            Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
-  return Math.round(2 * R * Math.asin(Math.sqrt(s)));
-}
-
-// --- リサイズ ---------------------------------------------------------
-async function resize(file, maxEdge, quality) {
-  let bmp;
-  try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); }
-  catch { bmp = await createImageBitmap(file); }
-  const scale = Math.min(1, maxEdge / Math.max(bmp.width, bmp.height));
-  const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
-  const c = document.createElement('canvas');
-  c.width = w; c.height = h;
-  c.getContext('2d').drawImage(bmp, 0, 0, w, h);
-  bmp.close?.();
-  const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', quality));
-  return { blob, w, h };
-}
-
-// --- 選択肢 -----------------------------------------------------------
-$('finding').addEventListener('change', (e) => {
-  $('alive-notice').hidden = e.target.value !== 'adult_alive';
-  $('none-hint').hidden = e.target.value !== 'none';
-  refresh();
-});
-
-// --- 写真 -------------------------------------------------------------
-$('file').addEventListener('change', async (ev) => {
-  const file = ev.target.files[0];
-  if (!file) return;
-  $('img-status').textContent = '処理中...';
-  $('submit').disabled = true;
-
-  try {
-    state.exif = parseExif(await file.slice(0, 131072).arrayBuffer());
-    const full = await resize(file, 1600, 0.82);
-    const thumb = await resize(file, 512, 0.75);
-    state.full = full.blob;
-    state.thumb = thumb.blob;
-    $('img-status').innerHTML =
-      `<span class="ok">${full.w}×${full.h} / ${(full.blob.size / 1024).toFixed(0)} KB に圧縮</span>`;
-    $('preview').innerHTML =
-      `<img class="preview" src="${URL.createObjectURL(full.blob)}" alt="">`;
-  } catch (e) {
-    $('img-status').innerHTML = `<span class="warn">画像を処理できません: ${e.message}</span>`;
-    return;
-  }
-
-  await locate();
-  refresh();
-});
-
-const SRC_LABEL = { exif: '写真の記録', geolocation: '端末の現在地', manual: '地図で指定' };
-
-function setPoint(lat, lng, src, acc = null, conflict = 0) {
-  state.point = { lat, lng, src, conflict, acc };
-  $('map-fallback').hidden = true;
-
-  const m = meshCodes(lat, lng);
-  $('loc-status').innerHTML = `<span class="ok">取得しました</span>`;
-  $('loc-detail').innerHTML =
-    `<tr><td>座標</td><td class="mono">${lat.toFixed(5)}, ${lng.toFixed(5)}</td></tr>` +
-    `<tr><td>取得元</td><td>${SRC_LABEL[src]}` +
-      `${acc != null ? ` / 誤差 約${Math.round(acc)}m` : ''}</td></tr>` +
-    `<tr><td>メッシュ</td><td class="mono">${m.mesh4}</td></tr>` +
-    (conflict ? `<tr><td>注意</td><td class="warn">写真の位置と現在地が離れています</td></tr>` : '');
-  checkNearby(lat, lng);
-  refresh();
-}
-
-// --- 近隣の既存通報チェック(重複抑制の一次確認) --------------------------
-let nearbySeq = 0;
-let nearbyMatch = null;
-
-async function checkNearby(lat, lng) {
-  const seq = ++nearbySeq;
-  $('nearby-notice').hidden = true;
-  $('nearby-status').textContent = '';
-  $('nearby-yes').hidden = false;
-  $('nearby-yes').disabled = false;
-  $('nearby-dismiss').hidden = false;
-  nearbyMatch = null;
-  try {
-    const params = new URLSearchParams({ lat: String(lat), lng: String(lng), reporter_id: reporterId });
-    const res = await fetch(`/api/nearby?${params}`);
-    const j = await res.json();
-    if (seq !== nearbySeq) return; // より新しい呼び出しで上書き済み
-    if (j.ok && j.match) {
-      nearbyMatch = j;
-      $('nearby-notice').hidden = false;
-    }
-  } catch {
-    // 失敗しても通報フローは止めない
-  }
-}
-
-$('nearby-yes').addEventListener('click', async () => {
-  if (!nearbyMatch || !state.point) return;
-  $('nearby-yes').disabled = true;
-  try {
-    const res = await fetch('/api/reactions', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        reporter_id: reporterId, report_id: nearbyMatch.report_id, kind: 'seen_too',
-        lat: state.point.lat, lng: state.point.lng,
-      }),
-    });
-    const j = await res.json();
-    if (!j.ok) throw new Error(j.error);
-    $('nearby-status').innerHTML = '<span class="ok">ありがとうございます。記録しました。</span>';
-    $('nearby-yes').hidden = true;
-    $('nearby-dismiss').hidden = true;
-  } catch (e) {
-    $('nearby-yes').disabled = false;
-    $('nearby-status').innerHTML = `<span class="warn">${e.message}</span>`;
-  }
-});
-
-$('nearby-dismiss').addEventListener('click', () => {
-  $('nearby-notice').hidden = true;
-});
-
-async function locate() {
-  $('loc-status').textContent = '位置情報を取得中...';
-  try {
-    const p = await getPosition();
-    state.geo = { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy };
-  } catch (e) {
-    state.geo = null;
-  }
-
-  const e = state.exif || {};
-  const src = e.lat != null ? 'exif' : (state.geo ? 'geolocation' : null);
-  const pt = src === 'exif' ? { lat: e.lat, lng: e.lng } : state.geo;
-
-  if (!pt) {
-    state.point = null;
-    $('loc-detail').innerHTML = '';
-    $('loc-status').innerHTML =
-      `<span class="warn">位置情報を取得できません。ブラウザの位置情報を許可するか、` +
-      `下の地図で場所を指定してください。</span>`;
-    openMapFallback();
-    return;
-  }
-
-  let conflict = 0;
-  if (e.lat != null && state.geo && distanceM(e, state.geo) > 300) conflict = 1;
-  setPoint(pt.lat, pt.lng, src, state.geo?.acc ?? null, conflict);
-}
-
-// --- 地図タップによる手動指定(GPS不許可・取得失敗時のフォールバック) --------
-let mapLibrePromise = null;
-function loadMapLibre() {
-  if (mapLibrePromise) return mapLibrePromise;
-  mapLibrePromise = new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = 'https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js';
-    s.onload = resolve;
-    s.onerror = () => reject(new Error('地図を読み込めませんでした'));
-    document.head.appendChild(s);
-  });
-  return mapLibrePromise;
-}
-
-let map = null, marker = null, manualLatLng = null;
-
-async function openMapFallback() {
-  $('map-fallback').hidden = false;
-  try {
-    await loadMapLibre();
-  } catch (e) {
-    $('map').innerHTML = `<p class="status warn">${e.message}</p>`;
-    return;
-  }
-
-  if (map) { map.resize(); return; }
-
-  map = new maplibregl.Map({
-    container: 'map',
-    style: {
-      version: 8,
-      sources: {
-        gsi: {
-          type: 'raster',
-          tiles: ['https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png'],
-          tileSize: 256,
-          maxzoom: 18,
-          attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" ' +
-                       'target="_blank" rel="noopener">地理院タイル</a>',
-        },
-      },
-      layers: [{ id: 'gsi', type: 'raster', source: 'gsi' }],
-    },
-    center: [139.767, 35.681],
-    zoom: 5,
-  });
-  map.addControl(new maplibregl.NavigationControl(), 'top-right');
-  map.on('click', (ev) => {
-    manualLatLng = { lat: ev.lngLat.lat, lng: ev.lngLat.lng };
-    if (marker) marker.setLngLat(ev.lngLat);
-    else marker = new maplibregl.Marker().setLngLat(ev.lngLat).addTo(map);
-    $('map-confirm').disabled = false;
-  });
-  setTimeout(() => map.resize(), 0);
-}
-
-$('map-toggle').addEventListener('click', (ev) => {
-  ev.preventDefault();
-  openMapFallback();
-});
-
-$('map-confirm').addEventListener('click', () => {
-  if (!manualLatLng) return;
-  setPoint(manualLatLng.lat, manualLatLng.lng, 'manual');
-});
-
-function refresh() {
-  const f = document.querySelector('input[name=finding]:checked');
-  $('submit').disabled = !(f && state.full && state.point);
-}
-
-// --- 送信 -------------------------------------------------------------
-$('submit').addEventListener('click', async () => {
-  const finding = document.querySelector('input[name=finding]:checked').value;
-  $('submit').disabled = true;
-  $('submit-status').textContent = '送信中...';
-
-  const fd = new FormData();
-  fd.append('reporter_id', reporterId);
-  fd.append('finding', finding);
-  fd.append('tree_species', $('species').value);
-  fd.append('lat', String(state.point.lat));
-  fd.append('lng', String(state.point.lng));
-  fd.append('loc_source', state.point.src);
-  fd.append('loc_conflict', String(state.point.conflict));
-  if (state.point.acc != null) fd.append('loc_accuracy_m', String(state.point.acc));
-  if (state.exif && state.exif.observedAt) {
-    fd.append('observed_at', String(Math.floor(state.exif.observedAt.getTime() / 1000)));
-  }
-  fd.append('note', $('note').value);
-  fd.append('full', state.full, 'full.jpg');
-  fd.append('thumb', state.thumb, 'thumb.jpg');
-
-  try {
-    const res = await fetch('/api/reports', { method: 'POST', body: fd });
-    const j = await res.json();
-    if (!j.ok) throw new Error(j.error || '送信に失敗しました');
-    $('submit-status').innerHTML =
-      `<span class="ok">送信しました。ありがとうございます。</span><br>` +
-      `受付番号 <span class="mono">${j.id.slice(0, 8)}</span> / ${j.points} ポイント獲得`;
-    $('submit').textContent = '送信済み';
-  } catch (e) {
-    $('submit-status').innerHTML = `<span class="warn">${e.message}</span>`;
-    $('submit').disabled = false;
-  }
-});
-</script>
 </body>
 </html>
