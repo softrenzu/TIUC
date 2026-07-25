@@ -20,6 +20,8 @@
   .card.primary .desc { color: #cfe3d8; }
   .card.primary:hover { background: #164a30; }
   footer { margin-top: 28px; font-size: 12px; color: var(--muted); }
+  .stats { font-size: 13px; color: var(--muted); margin: -12px 0 20px; }
+  .stats strong { color: #222; font-size: 15px; }
 </style>
 <body>
 
@@ -28,6 +30,8 @@
   サクラ・ウメ・モモなどバラ科樹木の害虫「クビアカツヤカミキリ」の被害を、
   スマホで撮影して通報できます。集まった情報は地図で公開され、行政の防除につながります。
 </p>
+
+<p class="stats" id="stats" hidden></p>
 
 <div class="cards">
   <a class="card primary" href="report.html">
@@ -45,6 +49,16 @@
 </div>
 
 <footer>ログイン不要・匿名で利用できます。</footer>
+
+<script type="module">
+fetch('/api/health').then((r) => r.json()).then((j) => {
+  if (!j.ok) return;
+  const el = document.getElementById('stats');
+  el.innerHTML = `これまでに <strong>${j.total}</strong> 件の通報が届いています` +
+    (j.confirmed ? `(うち被害確定 <strong>${j.confirmed}</strong> 件)` : '') + '。';
+  el.hidden = false;
+}).catch(() => {}); // 取得に失敗してもランディングページ自体は問題なく表示する
+</script>
 
 </body>
 </html>
