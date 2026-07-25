@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="ja">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>クビアカツヤカミキリ 被害マップ</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; font-family: system-ui, -apple-system, sans-serif; color: #222; }
+  #map { position: absolute; inset: 0; }
+
+  .panel { position: absolute; z-index: 1; background: #fff; border: 1px solid #ddd;
+           border-radius: 10px; padding: 12px; font-size: 13px; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+  #filters { top: 12px; left: 12px; width: 240px; }
+  #filters h1 { font-size: 14px; margin: 0 0 8px; }
+  #filters .row { margin-bottom: 8px; }
+  #filters label.date { display: block; color: #666; margin-bottom: 2px; }
+  #filters input[type=date] { width: 100%; font-size: 13px; padding: 4px; border: 1px solid #ddd;
+                               border-radius: 6px; }
+  #filters .resp label { display: flex; align-items: center; gap: 6px; padding: 2px 0; cursor: pointer; }
+  #legend { bottom: 24px; left: 12px; width: 200px; }
+  #legend h2 { font-size: 12px; color: #666; margin: 0 0 6px; font-weight: 500; }
+  #legend .swatches { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; }
+  #legend .sw { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  #legend .sw i.box { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
+  #legend .sw i.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block;
+                       border: 1.5px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.15); }
+  #status { position: absolute; z-index: 1; top: 12px; right: 12px; font-size: 12px; color: #666; }
+
+  .maplibregl-popup-content { font-size: 13px; padding: 10px 12px; }
+  .maplibregl-popup-content table { border-collapse: collapse; }
+  .maplibregl-popup-content td { padding: 2px 6px 2px 0; vertical-align: top; }
+  .maplibregl-popup-content td:first-child { color: #666; white-space: nowrap; }
+</style>
+<body>
+
+<div id="map"></div>
+
+<div id="filters" class="panel">
+  <h1>クビアカツヤカミキリ 被害マップ</h1>
+  <div class="row">
+    <label class="date" for="from">期間(はじめ)</label>
+    <input id="from" type="date">
+  </div>
+  <div class="row">
+    <label class="date" for="to">期間(おわり)</label>
+    <input id="to" type="date">
+  </div>
+  <div class="row resp">
+    <span style="color:#666">対応状況</span>
+    <label><input type="checkbox" value="none" checked> 未対応</label>
+    <label><input type="checkbox" value="scheduled" checked> 対応予定</label>
+    <label><input type="checkbox" value="treating" checked> 対応中</label>
+    <label><input type="checkbox" value="done" checked> 対応済み</label>
+  </div>
+</div>
+
+<div id="legend" class="panel">
+  <h2>通報件数(メッシュ集計)</h2>
+  <div class="swatches" id="mesh-legend"></div>
+  <h2>対応状況(公有地・被害確定のみピン表示)</h2>
+  <div class="swatches" id="pin-legend"></div>
+</div>
+
+<div id="status" class="panel" style="display:none"></div>
+
+<script type="module">
+const $ = (id) => document.getElementById(id);
+
+// --- 表示ラベル(review.html と共通の語彙) -----------------------------
+const FINDING = { frass: 'フラス', adult_alive: '成虫(生)', adult_dead: '成虫(死)',
+                  exit_hole: '脱出孔', none: '異常なし' };
+const SPECIES = { sakura: 'サクラ', ume: 'ウメ', momo: 'モモ', sumomo: 'スモモ',
+                   other_rosaceae: 'その他バラ科', non_rosaceae: 'バラ科以外', unknown: '不明' };
+const RESPONSE_LABEL = { scheduled: '対応予定', treating: '対応中', done: '対応済み' };
+
+const jst = (t) => t ? new Date(t * 1000).toLocaleDateString('ja-JP',
+  { timeZone: 'Asia/Tokyo', year: 'numeric', month: 'numeric', day: 'numeric' }) : '—';
+
+// --- 配色(dataviz スキルの sequential blue ランプ / status パレットをそのまま使用) ---
+// 件数のしきい値(1/3/6/12)は現状のデータ量に基づく仮置き。実データを見て調整する。
+const MESH_STEPS = [
+  { max: 0,  color: '#cde2fb', label: '0件' },
+  { max: 2,  color: '#9ec5f4', label: '1〜2件' },
+  { max: 5,  color: '#5598e7', label: '3〜5件' },
+  { max: 11, color: '#2a78d6', label: '6〜11件' },
+  { max: Infinity, color: '#184f95', label: '12件以上' },
+];
+const STATUS_COLOR = { none: '#d03b3b', scheduled: '#fab219', treating: '#ec835a', done: '#0ca30c' };
+const STATUS_LABEL = { none: '未対応', scheduled: '対応予定', treating: '対応中', done: '対応済み' };
+
+for (const s of MESH_STEPS) {
+  $('mesh-legend').insertAdjacentHTML('beforeend',
+    `<div class="sw"><i class="box" style="background:${s.color}"></i>${s.label}</div>`);
+}
+for (const k of ['none', 'scheduled', 'treating', 'done']) {
+  $('pin-legend').insertAdjacentHTML('beforeend',
+    `<div class="sw"><i class="dot" style="background:${STATUS_COLOR[k]}"></i>${STATUS_LABEL[k]}</div>`);
+}
+
+// --- MapLibre 遅延読込(index.html と同じパターン) ---------------------
+let mapLibrePromise = null;
+function loadMapLibre() {
+  if (mapLibrePromise) return mapLibrePromise;
+  mapLibrePromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js';
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('地図を読み込めませんでした'));
+    document.head.appendChild(s);
+  });
+  return mapLibrePromise;
+}
+
+// ズームがこの値以上で mesh5(250m)、未満で mesh3(1km)。実タイルを見ながら要調整。
+const MESH5_MIN_ZOOM = 12;
+
+function setStatus(text) {
+  const el = $('status');
+  el.textContent = text;
+  el.style.display = text ? 'block' : 'none';
+}
+
+async function main() {
+  await loadMapLibre();
+
+  const map = new maplibregl.Map({
+    container: 'map',
+    style: {
+      version: 8,
+      sources: {
+        gsi: {
+          type: 'raster',
+          tiles: ['https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png'],
+          tileSize: 256,
+          maxzoom: 18,
+          attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" ' +
+                       'target="_blank" rel="noopener">地理院タイル</a>',
+        },
+      },
+      layers: [{ id: 'gsi', type: 'raster', source: 'gsi' }],
+    },
+    center: [139.767, 35.681],
+    zoom: 10,
+  });
+  map.addControl(new maplibregl.NavigationControl(), 'top-right');
+
+  map.on('load', () => {
+    map.addSource('kubiaka', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+
+    map.addLayer({
+      id: 'mesh-fill', type: 'fill', source: 'kubiaka',
+      filter: ['==', ['get', 'kind'], 'mesh'],
+      paint: {
+        'fill-color': [
+          'step', ['get', 'damage_reports'],
+          '#cde2fb',
+          1, '#9ec5f4',
+          3, '#5598e7',
+          6, '#2a78d6',
+          12, '#184f95',
+        ],
+        'fill-opacity': 0.55,
+      },
+    });
+    map.addLayer({
+      id: 'mesh-outline', type: 'line', source: 'kubiaka',
+      filter: ['==', ['get', 'kind'], 'mesh'],
+      paint: { 'line-color': '#184f95', 'line-opacity': 0.5, 'line-width': 1 },
+    });
+    map.addLayer({
+      id: 'pins', type: 'circle', source: 'kubiaka',
+      filter: ['==', ['get', 'kind'], 'pin'],
+      paint: {
+        'circle-radius': 7,
+        'circle-color': [
+          'match', ['get', 'response_status'],
+          'scheduled', STATUS_COLOR.scheduled,
+          'treating', STATUS_COLOR.treating,
+          'done', STATUS_COLOR.done,
+          STATUS_COLOR.none,
+        ],
+        'circle-stroke-color': '#fff',
+        'circle-stroke-width': 1.5,
+      },
+    });
+
+    map.on('click', 'pins', (e) => {
+      const p = e.features[0].properties;
+      const respStatus = p.response_status || 'none';
+      new maplibregl.Popup({ closeButton: true, maxWidth: '260px' })
+        .setLngLat(e.lngLat)
+        .setHTML(`<table>
+          <tr><td>発見物</td><td>${FINDING[p.finding] || p.finding}</td></tr>
+          <tr><td>樹種</td><td>${SPECIES[p.tree_species] || '—'}</td></tr>
+          <tr><td>日付</td><td>${jst(p.event_at)}</td></tr>
+          <tr><td>対応状況</td><td>${STATUS_LABEL[respStatus]}</td></tr>
+          ${p.response_note ? `<tr><td>お知らせ</td><td>${escapeHtml(p.response_note)}</td></tr>` : ''}
+        </table>`)
+        .addTo(map);
+    });
+    map.on('mouseenter', 'pins', () => { map.getCanvas().style.cursor = 'pointer'; });
+    map.on('mouseleave', 'pins', () => { map.getCanvas().style.cursor = ''; });
+
+    refresh();
+  });
+
+  // --- データ取得 -------------------------------------------------------
+  function checkedResponses() {
+    return [...document.querySelectorAll('#filters .resp input:checked')].map((el) => el.value);
+  }
+
+  function dateToUnix(value, endOfDay) {
+    if (!value) return null;
+    const d = new Date(`${value}T${endOfDay ? '23:59:59' : '00:00:00'}+09:00`);
+    return Math.floor(d.getTime() / 1000);
+  }
+
+  let controller = null;
+  async function refresh() {
+    if (controller) controller.abort();
+    controller = new AbortController();
+
+    const b = map.getBounds();
+    const level = map.getZoom() >= MESH5_MIN_ZOOM ? 'mesh5' : 'mesh3';
+    const params = new URLSearchParams({
+      bbox: [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].join(','),
+      level,
+    });
+    const from = dateToUnix($('from').value, false);
+    const to = dateToUnix($('to').value, true);
+    if (from != null) params.set('from', String(from));
+    if (to != null) params.set('to', String(to));
+    params.set('response', checkedResponses().join(','));
+
+    setStatus('読み込み中…');
+    try {
+      const res = await fetch(`/api/map?${params}`, { signal: controller.signal });
+      const geojson = await res.json();
+      if (!res.ok) throw new Error(geojson.error || '取得に失敗しました');
+      map.getSource('kubiaka').setData(geojson);
+      setStatus('');
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+      setStatus(e.message);
+    }
+  }
+
+  let debounceTimer = null;
+  function scheduleRefresh() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(refresh, 300);
+  }
+  map.on('moveend', scheduleRefresh);
+  document.querySelectorAll('#filters input').forEach((el) => {
+    el.addEventListener('change', scheduleRefresh);
+  });
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+main().catch((e) => setStatus(e.message));
+</script>
+</body>
+</html>

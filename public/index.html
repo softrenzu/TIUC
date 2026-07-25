@@ -3,6 +3,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>クビアカツヤカミキリ 通報</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
 <style>
   :root { --line:#ddd; --muted:#666; --warn:#a33; --ok:#161; }
   * { box-sizing: border-box; }
@@ -31,6 +32,11 @@
   table { width: 100%; font-size: 12px; border-collapse: collapse; }
   td { padding: 2px 0; } td:first-child { color: var(--muted); width: 42%; }
   .mono { font-family: ui-monospace, monospace; }
+  #map-toggle-p { font-size: 13px; margin: 8px 0 0; }
+  #map { height: 260px; border-radius: 8px; margin-top: 8px; border: 1px solid var(--line); }
+  #map-confirm { width: 100%; padding: 10px; font-size: 14px; margin-top: 8px;
+                 border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+  #map-confirm:disabled { color: var(--muted); }
 </style>
 <body>
 
@@ -79,6 +85,11 @@
   <legend>4. 位置情報</legend>
   <p class="status" id="loc-status">写真を選ぶと自動で取得します。</p>
   <table id="loc-detail"></table>
+  <p class="status" id="map-toggle-p"><a href="#" id="map-toggle">地図で場所を指定する</a></p>
+  <div id="map-fallback" hidden>
+    <div id="map"></div>
+    <button id="map-confirm" type="button" disabled>この位置に決定</button>
+  </div>
 </fieldset>
 
 <fieldset>
@@ -168,6 +179,23 @@ $('file').addEventListener('change', async (ev) => {
   refresh();
 });
 
+const SRC_LABEL = { exif: '写真の記録', geolocation: '端末の現在地', manual: '地図で指定' };
+
+function setPoint(lat, lng, src, acc = null, conflict = 0) {
+  state.point = { lat, lng, src, conflict, acc };
+  $('map-fallback').hidden = true;
+
+  const m = meshCodes(lat, lng);
+  $('loc-status').innerHTML = `<span class="ok">取得しました</span>`;
+  $('loc-detail').innerHTML =
+    `<tr><td>座標</td><td class="mono">${lat.toFixed(5)}, ${lng.toFixed(5)}</td></tr>` +
+    `<tr><td>取得元</td><td>${SRC_LABEL[src]}` +
+      `${acc != null ? ` / 誤差 約${Math.round(acc)}m` : ''}</td></tr>` +
+    `<tr><td>メッシュ</td><td class="mono">${m.mesh4}</td></tr>` +
+    (conflict ? `<tr><td>注意</td><td class="warn">写真の位置と現在地が離れています</td></tr>` : '');
+  refresh();
+}
+
 async function locate() {
   $('loc-status').textContent = '位置情報を取得中...';
   try {
@@ -175,29 +203,92 @@ async function locate() {
     state.geo = { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy };
   } catch (e) {
     state.geo = null;
-    $('loc-status').innerHTML =
-      `<span class="warn">取得できません(${e.message})。ブラウザの位置情報を許可してください。</span>`;
   }
 
   const e = state.exif || {};
   const src = e.lat != null ? 'exif' : (state.geo ? 'geolocation' : null);
   const pt = src === 'exif' ? { lat: e.lat, lng: e.lng } : state.geo;
 
+  if (!pt) {
+    state.point = null;
+    $('loc-detail').innerHTML = '';
+    $('loc-status').innerHTML =
+      `<span class="warn">位置情報を取得できません。ブラウザの位置情報を許可するか、` +
+      `下の地図で場所を指定してください。</span>`;
+    openMapFallback();
+    return;
+  }
+
   let conflict = 0;
   if (e.lat != null && state.geo && distanceM(e, state.geo) > 300) conflict = 1;
-
-  state.point = pt ? { lat: pt.lat, lng: pt.lng, src, conflict, acc: state.geo?.acc ?? null } : null;
-
-  if (!pt) { $('loc-detail').innerHTML = ''; return; }
-  const m = meshCodes(pt.lat, pt.lng);
-  $('loc-status').innerHTML = `<span class="ok">取得しました</span>`;
-  $('loc-detail').innerHTML =
-    `<tr><td>座標</td><td class="mono">${pt.lat.toFixed(5)}, ${pt.lng.toFixed(5)}</td></tr>` +
-    `<tr><td>取得元</td><td>${src === 'exif' ? '写真の記録' : '端末の現在地'}` +
-      `${state.geo ? ` / 誤差 約${Math.round(state.geo.acc)}m` : ''}</td></tr>` +
-    `<tr><td>メッシュ</td><td class="mono">${m.mesh4}</td></tr>` +
-    (conflict ? `<tr><td>注意</td><td class="warn">写真の位置と現在地が離れています</td></tr>` : '');
+  setPoint(pt.lat, pt.lng, src, state.geo?.acc ?? null, conflict);
 }
+
+// --- 地図タップによる手動指定(GPS不許可・取得失敗時のフォールバック) --------
+let mapLibrePromise = null;
+function loadMapLibre() {
+  if (mapLibrePromise) return mapLibrePromise;
+  mapLibrePromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js';
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('地図を読み込めませんでした'));
+    document.head.appendChild(s);
+  });
+  return mapLibrePromise;
+}
+
+let map = null, marker = null, manualLatLng = null;
+
+async function openMapFallback() {
+  $('map-fallback').hidden = false;
+  try {
+    await loadMapLibre();
+  } catch (e) {
+    $('map').innerHTML = `<p class="status warn">${e.message}</p>`;
+    return;
+  }
+
+  if (map) { map.resize(); return; }
+
+  map = new maplibregl.Map({
+    container: 'map',
+    style: {
+      version: 8,
+      sources: {
+        gsi: {
+          type: 'raster',
+          tiles: ['https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png'],
+          tileSize: 256,
+          maxzoom: 18,
+          attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" ' +
+                       'target="_blank" rel="noopener">地理院タイル</a>',
+        },
+      },
+      layers: [{ id: 'gsi', type: 'raster', source: 'gsi' }],
+    },
+    center: [139.767, 35.681],
+    zoom: 5,
+  });
+  map.addControl(new maplibregl.NavigationControl(), 'top-right');
+  map.on('click', (ev) => {
+    manualLatLng = { lat: ev.lngLat.lat, lng: ev.lngLat.lng };
+    if (marker) marker.setLngLat(ev.lngLat);
+    else marker = new maplibregl.Marker().setLngLat(ev.lngLat).addTo(map);
+    $('map-confirm').disabled = false;
+  });
+  setTimeout(() => map.resize(), 0);
+}
+
+$('map-toggle').addEventListener('click', (ev) => {
+  ev.preventDefault();
+  openMapFallback();
+});
+
+$('map-confirm').addEventListener('click', () => {
+  if (!manualLatLng) return;
+  setPoint(manualLatLng.lat, manualLatLng.lng, 'manual');
+});
 
 function refresh() {
   const f = document.querySelector('input[name=finding]:checked');
