@@ -10,6 +10,8 @@ const DECISIONS = new Set(["confirmed", "rejected", "duplicate"]);
 const LOC_SOURCES = new Set(["exif", "geolocation", "manual"]);
 const MAP_LEVELS = new Set(["mesh3", "mesh5"]);
 const RESPONSE_BUCKETS = new Set(["none", "scheduled", "treating", "done"]);
+const REACTION_KINDS = new Set(["seen_too", "thanks"]);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const HOURLY_LIMIT = 30;
@@ -108,7 +110,7 @@ async function createReport(request, env) {
   const form = await request.formData();
 
   const reporterId = String(form.get("reporter_id") || "");
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(reporterId)) {
+  if (!UUID_RE.test(reporterId)) {
     return bad("通報者IDが不正です");
   }
 
@@ -395,13 +397,17 @@ async function publicMap(request, env) {
   // 公有地・確定・被害ありの案件のみ正確な座標を返す(異常なし確定はピンにしない)。
   // idx_reports_public_pin の述語と同じ書き方にして部分インデックスを使わせる。
   const pinSql = `
-    SELECT id, lat, lng, finding, tree_species,
-           COALESCE(observed_at, created_at) AS event_at,
-           response_status, response_note
-      FROM reports
-     WHERE land_type = 'public' AND status = 'confirmed' AND finding <> 'none'
-       AND lat BETWEEN ?1 AND ?2 AND lng BETWEEN ?3 AND ?4
-       AND COALESCE(observed_at, created_at) BETWEEN ?5 AND ?6
+    SELECT r.id, r.lat, r.lng, r.finding, r.tree_species,
+           COALESCE(r.observed_at, r.created_at) AS event_at,
+           r.response_status, r.response_note,
+           (SELECT COUNT(*) FROM reactions x
+             WHERE x.report_id = r.id AND x.kind = 'seen_too') AS seen_too_count,
+           (SELECT COUNT(*) FROM reactions x
+             WHERE x.report_id = r.id AND x.kind = 'thanks')   AS thanks_count
+      FROM reports r
+     WHERE r.land_type = 'public' AND r.status = 'confirmed' AND r.finding <> 'none'
+       AND r.lat BETWEEN ?1 AND ?2 AND r.lng BETWEEN ?3 AND ?4
+       AND COALESCE(r.observed_at, r.created_at) BETWEEN ?5 AND ?6
        AND (${responseFilter.sql})
      LIMIT 500`;
 
@@ -440,6 +446,7 @@ async function publicMap(request, env) {
         kind: "pin", id: row.id, finding: row.finding, tree_species: row.tree_species,
         event_at: row.event_at, response_status: row.response_status,
         response_note: row.response_note,
+        seen_too_count: row.seen_too_count, thanks_count: row.thanks_count,
       },
       geometry: { type: "Point", coordinates: [row.lng, row.lat] },
     });
@@ -451,6 +458,102 @@ async function publicMap(request, env) {
   });
   await cache.put(cacheKey, response.clone());
   return response;
+}
+
+// =====================================================================
+// スタンプ(seen_too / thanks)
+//   CLAUDE.md ルール6: 2種のみ、複合PKで連打をDBが弾く。ポイントは付与しない。
+// =====================================================================
+
+// 近隣の既存通報チェック(重複抑制の一次確認)。認証不要・読み取り専用。
+// finding/tree_species/座標/land_type は返さない — 任意の座標に対して問い合わせ
+// 可能なので、/api/map のメッシュ集計(件数のみ)より細かい粒度の開示にしないため。
+async function nearbyCheck(request, env) {
+  const url = new URL(request.url);
+  const sp = url.searchParams;
+
+  const reporterId = String(sp.get("reporter_id") || "");
+  if (!UUID_RE.test(reporterId)) return bad("通報者IDが不正です");
+
+  const lat = Number(sp.get("lat"));
+  const lng = Number(sp.get("lng"));
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return bad("位置情報がありません");
+  if (lat < 20 || lat > 46 || lng < 122 || lng > 154) return bad("日本国内の座標ではありません");
+
+  // メッシュコードは必ずサーバ側で再計算する(クライアント値は信用しない)
+  const mesh = meshCodes(lat, lng);
+
+  const row = await env.DB.prepare(
+    `SELECT id AS report_id, COALESCE(observed_at, created_at) AS event_at
+       FROM reports
+      WHERE mesh5 = ?1
+        AND reporter_id <> ?2
+        AND status IN ('pending_review','provisional','confirmed')
+        AND created_at > unixepoch() - 2592000
+      ORDER BY created_at DESC
+      LIMIT 1`
+  ).bind(mesh.mesh5, reporterId).first();
+
+  if (!row) return Response.json({ ok: true, match: false });
+  return Response.json({ ok: true, match: true, report_id: row.report_id, event_at: row.event_at });
+}
+
+async function createReaction(request, env) {
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return bad("JSON の形式が不正です");
+  }
+
+  const reporterId = String(body.reporter_id || "");
+  if (!UUID_RE.test(reporterId)) return bad("通報者IDが不正です");
+
+  const reportId = String(body.report_id || "");
+  if (!reportId) return bad("report_id が必要です");
+
+  const kind = String(body.kind || "");
+  if (!REACTION_KINDS.has(kind)) return bad("スタンプの種類が不正です");
+
+  const target = await env.DB.prepare(
+    "SELECT reporter_id, status, land_type, finding FROM reports WHERE id = ?1"
+  ).bind(reportId).first();
+  if (!target) return bad("該当する通報がありません", 404);
+  if (target.reporter_id === reporterId) return bad("自分の通報にはスタンプできません");
+
+  if (kind === "seen_too") {
+    if (!["pending_review", "provisional", "confirmed"].includes(target.status)) {
+      return bad("この通報にはスタンプできません");
+    }
+  } else {
+    // thanks: publicMap() のピン表示条件(land_type/status/finding)と厳密に一致させる
+    if (!(target.land_type === "public" && target.status === "confirmed" && target.finding !== "none")) {
+      return bad("この通報にはスタンプできません");
+    }
+  }
+
+  let lat = null, lng = null, mesh5 = null;
+  if (body.lat != null && body.lng != null) {
+    lat = Number(body.lat);
+    lng = Number(body.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return bad("位置情報が不正です");
+    if (lat < 20 || lat > 46 || lng < 122 || lng > 154) return bad("日本国内の座標ではありません");
+    mesh5 = meshCodes(lat, lng).mesh5;
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  await env.DB.batch([
+    env.DB.prepare(
+      "INSERT INTO reporters (id, created_at) VALUES (?1, ?2) ON CONFLICT(id) DO NOTHING"
+    ).bind(reporterId, now),
+    env.DB.prepare(
+      `INSERT INTO reactions (report_id, reporter_id, kind, lat, lng, mesh5, created_at)
+       VALUES (?1,?2,?3,?4,?5,?6,?7)
+       ON CONFLICT (report_id, reporter_id, kind) DO NOTHING`
+    ).bind(reportId, reporterId, kind, lat, lng, mesh5, now),
+  ]);
+
+  return Response.json({ ok: true });
 }
 
 // =====================================================================
@@ -470,6 +573,16 @@ export default {
       // --- 公開マップ(認証不要。メッシュ集計 + 公有地確定案件のみ正確な座標) ---
       if (path === "/api/map" && request.method === "GET") {
         return await publicMap(request, env);
+      }
+
+      // --- 近隣の既存通報チェック(重複抑制の一次確認。認証不要・読み取りのみ) ---
+      if (path === "/api/nearby" && request.method === "GET") {
+        return await nearbyCheck(request, env);
+      }
+
+      // --- スタンプ(seen_too / thanks) ---
+      if (path === "/api/reactions" && request.method === "POST") {
+        return await createReaction(request, env);
       }
 
       // Secure 属性は HTTPS の時だけ付ける。

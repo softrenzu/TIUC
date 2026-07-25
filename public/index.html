@@ -37,6 +37,12 @@
   #map-confirm { width: 100%; padding: 10px; font-size: 14px; margin-top: 8px;
                  border: 1px solid var(--line); border-radius: 8px; background: #fff; }
   #map-confirm:disabled { color: var(--muted); }
+  .info-notice { background: #f2f6fb; border: 1px solid #cddbea; border-radius: 8px;
+                 padding: 10px; font-size: 13px; margin-top: 10px; }
+  .info-notice .row { display: flex; gap: 8px; margin-top: 8px; }
+  .info-notice button { flex: 1; padding: 9px; font-size: 13px;
+                         border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+  .info-notice button:disabled { color: var(--muted); }
 </style>
 <body>
 
@@ -89,6 +95,14 @@
   <div id="map-fallback" hidden>
     <div id="map"></div>
     <button id="map-confirm" type="button" disabled>この位置に決定</button>
+  </div>
+  <div id="nearby-notice" class="info-notice" hidden>
+    <p style="margin:0">近くで最近、別の方から報告がありました。同じ発見の可能性があります。</p>
+    <div class="row">
+      <button id="nearby-yes" type="button">はい、私も見ました</button>
+      <button id="nearby-dismiss" type="button">いいえ、違います</button>
+    </div>
+    <p class="status" id="nearby-status"></p>
   </div>
 </fieldset>
 
@@ -193,8 +207,61 @@ function setPoint(lat, lng, src, acc = null, conflict = 0) {
       `${acc != null ? ` / 誤差 約${Math.round(acc)}m` : ''}</td></tr>` +
     `<tr><td>メッシュ</td><td class="mono">${m.mesh4}</td></tr>` +
     (conflict ? `<tr><td>注意</td><td class="warn">写真の位置と現在地が離れています</td></tr>` : '');
+  checkNearby(lat, lng);
   refresh();
 }
+
+// --- 近隣の既存通報チェック(重複抑制の一次確認) --------------------------
+let nearbySeq = 0;
+let nearbyMatch = null;
+
+async function checkNearby(lat, lng) {
+  const seq = ++nearbySeq;
+  $('nearby-notice').hidden = true;
+  $('nearby-status').textContent = '';
+  $('nearby-yes').hidden = false;
+  $('nearby-yes').disabled = false;
+  $('nearby-dismiss').hidden = false;
+  nearbyMatch = null;
+  try {
+    const params = new URLSearchParams({ lat: String(lat), lng: String(lng), reporter_id: reporterId });
+    const res = await fetch(`/api/nearby?${params}`);
+    const j = await res.json();
+    if (seq !== nearbySeq) return; // より新しい呼び出しで上書き済み
+    if (j.ok && j.match) {
+      nearbyMatch = j;
+      $('nearby-notice').hidden = false;
+    }
+  } catch {
+    // 失敗しても通報フローは止めない
+  }
+}
+
+$('nearby-yes').addEventListener('click', async () => {
+  if (!nearbyMatch || !state.point) return;
+  $('nearby-yes').disabled = true;
+  try {
+    const res = await fetch('/api/reactions', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        reporter_id: reporterId, report_id: nearbyMatch.report_id, kind: 'seen_too',
+        lat: state.point.lat, lng: state.point.lng,
+      }),
+    });
+    const j = await res.json();
+    if (!j.ok) throw new Error(j.error);
+    $('nearby-status').innerHTML = '<span class="ok">ありがとうございます。記録しました。</span>';
+    $('nearby-yes').hidden = true;
+    $('nearby-dismiss').hidden = true;
+  } catch (e) {
+    $('nearby-yes').disabled = false;
+    $('nearby-status').innerHTML = `<span class="warn">${e.message}</span>`;
+  }
+});
+
+$('nearby-dismiss').addEventListener('click', () => {
+  $('nearby-notice').hidden = true;
+});
 
 async function locate() {
   $('loc-status').textContent = '位置情報を取得中...';

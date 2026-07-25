@@ -31,6 +31,11 @@
   .maplibregl-popup-content table { border-collapse: collapse; }
   .maplibregl-popup-content td { padding: 2px 6px 2px 0; vertical-align: top; }
   .maplibregl-popup-content td:first-child { color: #666; white-space: nowrap; }
+  .popup-actions { display: flex; gap: 6px; margin-top: 8px; }
+  .popup-actions button { flex: 1; font-size: 12px; padding: 6px; border: 1px solid #ddd;
+                           border-radius: 6px; background: #fff; cursor: pointer; }
+  .popup-actions button:disabled { color: #999; cursor: default; }
+  .react-msg { font-size: 11px; color: #a33; margin: 4px 0 0; }
 </style>
 <body>
 
@@ -66,6 +71,26 @@
 
 <script type="module">
 const $ = (id) => document.getElementById(id);
+
+// --- 通報者ID(index.html と同じキーで匿名・端末保存) --------------------
+let reporterId = localStorage.getItem('kubiaka_reporter_id');
+if (!reporterId) {
+  reporterId = crypto.randomUUID();
+  localStorage.setItem('kubiaka_reporter_id', reporterId);
+}
+
+// スタンプ済みかどうかをローカルにも記録し、リロード後の見た目上の連打を防ぐ
+// (サーバ側は複合主キーで実害なく防げているが、UI 上の混乱を避けるため)。
+const REACTED_KEY = 'kubiaka_reacted';
+function getReacted() {
+  try { return new Set(JSON.parse(localStorage.getItem(REACTED_KEY) || '[]')); }
+  catch { return new Set(); }
+}
+function markReacted(reportId, kind) {
+  const s = getReacted();
+  s.add(`${reportId}:${kind}`);
+  localStorage.setItem(REACTED_KEY, JSON.stringify([...s]));
+}
 
 // --- 表示ラベル(review.html と共通の語彙) -----------------------------
 const FINDING = { frass: 'フラス', adult_alive: '成虫(生)', adult_dead: '成虫(死)',
@@ -188,7 +213,11 @@ async function main() {
     map.on('click', 'pins', (e) => {
       const p = e.features[0].properties;
       const respStatus = p.response_status || 'none';
-      new maplibregl.Popup({ closeButton: true, maxWidth: '260px' })
+      const reacted = getReacted();
+      const seenDone = reacted.has(`${p.id}:seen_too`);
+      const thanksDone = reacted.has(`${p.id}:thanks`);
+
+      const popup = new maplibregl.Popup({ closeButton: true, maxWidth: '260px' })
         .setLngLat(e.lngLat)
         .setHTML(`<table>
           <tr><td>発見物</td><td>${FINDING[p.finding] || p.finding}</td></tr>
@@ -196,11 +225,44 @@ async function main() {
           <tr><td>日付</td><td>${jst(p.event_at)}</td></tr>
           <tr><td>対応状況</td><td>${STATUS_LABEL[respStatus]}</td></tr>
           ${p.response_note ? `<tr><td>お知らせ</td><td>${escapeHtml(p.response_note)}</td></tr>` : ''}
-        </table>`)
+        </table>
+        <div class="popup-actions">
+          <button class="react-btn" data-kind="seen_too" data-id="${p.id}" ${seenDone ? 'disabled' : ''}>
+            私も見た (<span class="cnt">${p.seen_too_count}</span>)</button>
+          <button class="react-btn" data-kind="thanks" data-id="${p.id}" ${thanksDone ? 'disabled' : ''}>
+            ありがとう (<span class="cnt">${p.thanks_count}</span>)</button>
+        </div>
+        <p class="react-msg"></p>`)
         .addTo(map);
+
+      popup.getElement().querySelectorAll('.react-btn').forEach((btn) => {
+        btn.addEventListener('click', () => react(btn));
+      });
     });
     map.on('mouseenter', 'pins', () => { map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', 'pins', () => { map.getCanvas().style.cursor = ''; });
+
+    async function react(btn) {
+      const kind = btn.dataset.kind;
+      const reportId = btn.dataset.id;
+      const msgEl = btn.closest('.maplibregl-popup-content').querySelector('.react-msg');
+      btn.disabled = true;
+      msgEl.textContent = '';
+      try {
+        const res = await fetch('/api/reactions', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ reporter_id: reporterId, report_id: reportId, kind }),
+        });
+        const j = await res.json();
+        if (!j.ok) throw new Error(j.error);
+        markReacted(reportId, kind);
+        const cnt = btn.querySelector('.cnt');
+        cnt.textContent = String(Number(cnt.textContent) + 1);
+      } catch (e) {
+        btn.disabled = false;
+        msgEl.textContent = e.message;
+      }
+    }
 
     refresh();
   });
