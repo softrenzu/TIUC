@@ -8,7 +8,7 @@ const LAND_TYPES = new Set(["public", "private", "unknown"]);
 const RESPONSE_STATUS = new Set(["scheduled", "treating", "done"]);
 const DECISIONS = new Set(["confirmed", "rejected", "duplicate"]);
 const LOC_SOURCES = new Set(["exif", "geolocation", "manual"]);
-const MAP_LEVELS = new Set(["mesh3", "mesh5"]);
+const MAP_LEVELS = new Set(["mesh3", "mesh4", "mesh5"]);
 const RESPONSE_BUCKETS = new Set(["none", "scheduled", "treating", "done"]);
 const REACTION_KINDS = new Set(["seen_too", "thanks"]);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -348,7 +348,7 @@ async function publicMap(request, env) {
   const sp = url.searchParams;
 
   const level = sp.get("level") || "mesh3";
-  if (!MAP_LEVELS.has(level)) return bad("level は mesh3 か mesh5 を指定してください");
+  if (!MAP_LEVELS.has(level)) return bad("level は mesh3・mesh4・mesh5 のいずれかを指定してください");
 
   const bboxRaw = sp.get("bbox");
   if (!bboxRaw) return bad("bbox が必要です");

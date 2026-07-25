@@ -58,27 +58,45 @@ export function meshBounds(code) {
   return { latMin, latMax: latMin + latSpan, lngMin, lngMax: lngMin + lngSpan };
 }
 
-const MESH3_LAT_STEP = 30 / 3600;
-const MESH3_LNG_STEP = 45 / 3600;
+const MESH_STEP = {
+  mesh3: { lat: 30 / 3600, lng: 45 / 3600 },
+  mesh4: { lat: 15 / 3600, lng: 22.5 / 3600 },
+  mesh5: { lat: 7.5 / 3600, lng: 11.25 / 3600 },
+};
 
-// 指定した範囲(緯度経度)を覆う mesh3(約1km)セルの個数を見積もる。
+// 指定した範囲(緯度経度)を覆う mesh3/4/5 セルの個数を見積もる。
 // 実際に列挙する前の上限チェック用(広域表示だと大量になりすぎるため)。
-export function mesh3GridCount(minLat, minLng, maxLat, maxLng) {
-  // mesh3Grid() は境界セルを取りこぼさないよう maxLat/maxLng を1ステップ超えて
-  // サンプリングするため、そのぶん(+2)を見積りにも反映する。
-  const rows = Math.floor((maxLat - minLat) / MESH3_LAT_STEP) + 2;
-  const cols = Math.floor((maxLng - minLng) / MESH3_LNG_STEP) + 2;
-  return Math.max(0, rows) * Math.max(0, cols);
+export function meshGridCount(minLat, minLng, maxLat, maxLng, level) {
+  const step = MESH_STEP[level];
+  // meshGrid() は境界セルを取りこぼさないよう maxLat/maxLng を1ステップ超えて
+  // サンプリングするため、そのぶん(+2)を見積りにも反映する。実測でセル数が見積りを
+  // 1〜2割ほど上回ることがあったため、上限チェック用に安全係数(1.3倍)をかける。
+  const rows = Math.floor((maxLat - minLat) / step.lat) + 2;
+  const cols = Math.floor((maxLng - minLng) / step.lng) + 2;
+  return Math.ceil(Math.max(0, rows) * Math.max(0, cols) * 1.3);
 }
 
-// 指定した範囲を覆う mesh3 コードを列挙する。セルサイズ刻みで座標をサンプリングし、
-// 得られたコードを重複排除する(境界ちょうどに当たらなくても、ステップ幅がセルサイズ
-// 以下なので全セルを最低1回はサンプリングできる)。
-export function mesh3Grid(minLat, minLng, maxLat, maxLng) {
+// 指定した範囲を覆う mesh3/4/5 コードを列挙する。セル内を複数点サンプリングして
+// 得られたコードを重複排除する。
+//
+// 実際のメッシュ境界は緯度経度0を基準にした絶対格子で、bbox の左下(minLat/minLng)を
+// 基準にサンプリングするとほぼ確実に格子とズレる(位相がずれる)。ステップ幅をセル
+// サイズと厳密に一致させると、この位相ズレと浮動小数点誤差が組み合わさってサンプル点が
+// セル境界のごく近くに落ち、本来とは別のセルに丸められてセルを1つ丸ごと取りこぼす
+// ことがある(実測で発生を確認済み)。そのためステップ幅をセルサイズの半分にし、
+// 各セルに複数回サンプルが当たるようにして取りこぼしを防ぐ。
+export function meshGrid(minLat, minLng, maxLat, maxLng, level) {
+  const cell = MESH_STEP[level];
+  const sampleLat = cell.lat / 2;
+  const sampleLng = cell.lng / 2;
+  const latSteps = Math.floor((maxLat - minLat) / sampleLat) + 2;
+  const lngSteps = Math.floor((maxLng - minLng) / sampleLng) + 2;
   const codes = new Set();
-  for (let lat = minLat; lat <= maxLat + MESH3_LAT_STEP; lat += MESH3_LAT_STEP) {
-    for (let lng = minLng; lng <= maxLng + MESH3_LNG_STEP; lng += MESH3_LNG_STEP) {
-      codes.add(meshCodes(lat, lng).mesh3);
+  for (let i = 0; i <= latSteps; i++) {
+    const lat = minLat + i * sampleLat;
+    for (let j = 0; j <= lngSteps; j++) {
+      const lng = minLng + j * sampleLng;
+      codes.add(meshCodes(lat, lng)[level]);
     }
   }
   return [...codes];
