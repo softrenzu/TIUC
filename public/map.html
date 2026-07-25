@@ -66,11 +66,16 @@
   <div class="swatches" id="mesh-legend"></div>
   <h2>対応状況(公有地・被害確定のみピン表示)</h2>
   <div class="swatches" id="pin-legend"></div>
+  <h2>未調査エリア(広域表示のみ)</h2>
+  <div class="swatches" id="unsurveyed-legend"></div>
+  <p id="unsurveyed-hint" style="margin:4px 0 0;font-size:11px;color:#666" hidden></p>
 </div>
 
 <div id="status" class="panel" style="display:none"></div>
 
 <script type="module">
+import { mesh3Grid, mesh3GridCount, meshBounds } from './mesh.js';
+
 const $ = (id) => document.getElementById(id);
 
 // --- 通報者ID(index.html と同じキーで匿名・端末保存) --------------------
@@ -124,6 +129,13 @@ for (const k of ['none', 'scheduled', 'treating', 'done']) {
     `<div class="sw"><i class="dot" style="background:${STATUS_COLOR[k]}"></i>${STATUS_LABEL[k]}</div>`);
 }
 
+// 未調査(通報0件)の代用指標。survey_mesh(自治体の調査対象データ)は未整備のため、
+// 「通報が1件も無いメッシュ」を暫定的に未調査とみなしている。本来の調査対象かどうか
+// (山林・水面など対象外エリアも含めて「未調査」表示になる)とは別軸である点に注意。
+const UNSURVEYED_COLOR = '#ded9cd';
+$('unsurveyed-legend').insertAdjacentHTML('beforeend',
+  `<div class="sw"><i class="box" style="background:${UNSURVEYED_COLOR}"></i>通報0件(未調査の目安)</div>`);
+
 // --- MapLibre 遅延読込(index.html と同じパターン) ---------------------
 let mapLibrePromise = null;
 function loadMapLibre() {
@@ -173,6 +185,17 @@ async function main() {
 
   map.on('load', () => {
     map.addSource('kubiaka', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+
+    map.addLayer({
+      id: 'unsurveyed-fill', type: 'fill', source: 'kubiaka',
+      filter: ['==', ['get', 'kind'], 'unsurveyed'],
+      paint: { 'fill-color': UNSURVEYED_COLOR, 'fill-opacity': 0.45 },
+    });
+    map.addLayer({
+      id: 'unsurveyed-outline', type: 'line', source: 'kubiaka',
+      filter: ['==', ['get', 'kind'], 'unsurveyed'],
+      paint: { 'line-color': '#8a8478', 'line-opacity': 0.5, 'line-width': 1, 'line-dasharray': [2, 2] },
+    });
 
     map.addLayer({
       id: 'mesh-fill', type: 'fill', source: 'kubiaka',
@@ -279,6 +302,48 @@ async function main() {
     return Math.floor(d.getTime() / 1000);
   }
 
+  // --- 未調査エリア(通報0件のメッシュ)------------------------------------
+  // survey_mesh(自治体の調査対象データ)が未整備のため、bbox 内を mesh3 グリッドで
+  // 理論上列挙し、/api/map が返した mesh 集計に無いセル(=通報0件)を「未調査」として
+  // 追加描画する。完全にクライアント側の代用ロジックで、新規 API は使わない。
+  const MESH3_GRID_CAP = 8000;
+
+  function addUnsurveyedFeatures(geojson, bounds, level) {
+    if (level !== 'mesh3') {
+      $('unsurveyed-hint').hidden = true;
+      return;
+    }
+    const minLat = bounds.getSouth(), maxLat = bounds.getNorth();
+    const minLng = bounds.getWest(), maxLng = bounds.getEast();
+
+    if (mesh3GridCount(minLat, minLng, maxLat, maxLng) > MESH3_GRID_CAP) {
+      $('unsurveyed-hint').hidden = false;
+      $('unsurveyed-hint').textContent = 'エリアが広すぎるため未調査表示は省略しています。ズームインしてください。';
+      return;
+    }
+    $('unsurveyed-hint').hidden = true;
+
+    const reported = new Set(
+      geojson.features.filter((f) => f.properties.kind === 'mesh').map((f) => f.properties.mesh)
+    );
+    for (const code of mesh3Grid(minLat, minLng, maxLat, maxLng)) {
+      if (reported.has(code)) continue;
+      const b = meshBounds(code);
+      geojson.features.push({
+        type: 'Feature',
+        properties: { kind: 'unsurveyed', mesh: code },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [[
+            [b.lngMin, b.latMin], [b.lngMax, b.latMin],
+            [b.lngMax, b.latMax], [b.lngMin, b.latMax],
+            [b.lngMin, b.latMin],
+          ]],
+        },
+      });
+    }
+  }
+
   let controller = null;
   async function refresh() {
     if (controller) controller.abort();
@@ -301,6 +366,7 @@ async function main() {
       const res = await fetch(`/api/map?${params}`, { signal: controller.signal });
       const geojson = await res.json();
       if (!res.ok) throw new Error(geojson.error || '取得に失敗しました');
+      addUnsurveyedFeatures(geojson, b, level);
       map.getSource('kubiaka').setData(geojson);
       setStatus('');
     } catch (e) {

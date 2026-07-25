@@ -94,6 +94,13 @@ reports.response_status: null / scheduled / treating / done(現地の対応状�
 
 完了: 通報フォーム(地図タップでの位置指定フォールバック込み) / 通報受付 API / R2保存 / D1登録 /
       レビュー画面(判定・土地種別・対応状況・お知らせ) / 公開マップ(MapLibre + 国土地理院タイル、
-      `GET /api/map`) / スタンプ(seen_too・thanks、`POST /api/reactions`、通報フォームでの近隣重複
-      確認 `GET /api/nearby` 込み) / 通報者マイページ(`GET /api/mypage`)。
-未着手: AI一次判定 / 未調査メッシュ表示 / チーム機能 / Cloudflare Access 移行 / 独自ドメイン。
+      `GET /api/map`、未調査エリアの目安表示込み※) / スタンプ(seen_too・thanks、`POST /api/reactions`、
+      通報フォームでの近隣重複確認 `GET /api/nearby` 込み) / 通報者マイページ(`GET /api/mypage`) /
+      ランディングページ(`/`)。
+未着手: AI一次判定 / チーム機能 / Cloudflare Access 移行 / 独自ドメイン。
+
+※ 未調査エリア表示は `survey_mesh`(自治体の調査対象データ)未整備のため、「bboxを mesh3 グリッドで
+  理論上列挙し、通報が1件も無いセル」を暫定的な代用指標として使っている(`public/mesh.js` の
+  `mesh3Grid`/`mesh3GridCount`、`map.html` 内で完結、新規APIなし)。山林・水面など本来調査対象外の
+  エリアも区別なく「未調査」表示になる既知の制約あり。自治体側の実データが手に入ったら
+  `survey_mesh` テーブルを使う本来の設計に置き換える。

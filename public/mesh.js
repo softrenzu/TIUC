@@ -57,3 +57,29 @@ export function meshBounds(code) {
   }
   return { latMin, latMax: latMin + latSpan, lngMin, lngMax: lngMin + lngSpan };
 }
+
+const MESH3_LAT_STEP = 30 / 3600;
+const MESH3_LNG_STEP = 45 / 3600;
+
+// 指定した範囲(緯度経度)を覆う mesh3(約1km)セルの個数を見積もる。
+// 実際に列挙する前の上限チェック用(広域表示だと大量になりすぎるため)。
+export function mesh3GridCount(minLat, minLng, maxLat, maxLng) {
+  // mesh3Grid() は境界セルを取りこぼさないよう maxLat/maxLng を1ステップ超えて
+  // サンプリングするため、そのぶん(+2)を見積りにも反映する。
+  const rows = Math.floor((maxLat - minLat) / MESH3_LAT_STEP) + 2;
+  const cols = Math.floor((maxLng - minLng) / MESH3_LNG_STEP) + 2;
+  return Math.max(0, rows) * Math.max(0, cols);
+}
+
+// 指定した範囲を覆う mesh3 コードを列挙する。セルサイズ刻みで座標をサンプリングし、
+// 得られたコードを重複排除する(境界ちょうどに当たらなくても、ステップ幅がセルサイズ
+// 以下なので全セルを最低1回はサンプリングできる)。
+export function mesh3Grid(minLat, minLng, maxLat, maxLng) {
+  const codes = new Set();
+  for (let lat = minLat; lat <= maxLat + MESH3_LAT_STEP; lat += MESH3_LAT_STEP) {
+    for (let lng = minLng; lng <= maxLng + MESH3_LNG_STEP; lng += MESH3_LNG_STEP) {
+      codes.add(meshCodes(lat, lng).mesh3);
+    }
+  }
+  return [...codes];
+}
