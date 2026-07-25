@@ -119,13 +119,11 @@
 <script type="module">
 import { meshCodes } from './mesh.js';
 import { parseExif } from './exif.js';
+import { getReporterId, bootstrapAuth } from './auth.js';
 
-// --- 通報者ID(匿名。端末に保存されるだけ) ---------------------------
-let reporterId = localStorage.getItem('kubiaka_reporter_id');
-if (!reporterId) {
-  reporterId = crypto.randomUUID();
-  localStorage.setItem('kubiaka_reporter_id', reporterId);
-}
+// --- 通報者ID(匿名。Googleログイン済みなら端末間で同じIDに揃う) -----------
+let reporterId = getReporterId();
+const authReady = bootstrapAuth().then((r) => { reporterId = r.reporterId; });
 
 const $ = (id) => document.getElementById(id);
 const state = { full: null, thumb: null, exif: null, geo: null, point: null };
@@ -243,6 +241,7 @@ $('nearby-yes').addEventListener('click', async () => {
   if (!nearbyMatch || !state.point) return;
   $('nearby-yes').disabled = true;
   try {
+    await authReady;
     const res = await fetch('/api/reactions', {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -369,6 +368,7 @@ $('submit').addEventListener('click', async () => {
   const finding = document.querySelector('input[name=finding]:checked').value;
   $('submit').disabled = true;
   $('submit-status').textContent = '送信中...';
+  await authReady;
 
   const fd = new FormData();
   fd.append('reporter_id', reporterId);

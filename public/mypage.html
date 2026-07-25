@@ -42,6 +42,8 @@
 <h1>マイページ</h1>
 <p class="lead">これまでの通報とポイントの履歴です。</p>
 
+<div id="account" class="card" style="margin-bottom:16px"></div>
+
 <div class="stats" id="stats"></div>
 
 <h2>通報履歴</h2>
@@ -53,14 +55,17 @@
 <p class="status" id="page-status"></p>
 
 <script type="module">
+import { getReporterId, bootstrapAuth, googleLoginUrl, setReporterId } from './auth.js';
+
 const $ = (id) => document.getElementById(id);
 
-// --- 通報者ID(index.html / map.html と同じキーで匿名・端末保存) --------
-let reporterId = localStorage.getItem('kubiaka_reporter_id');
-if (!reporterId) {
-  reporterId = crypto.randomUUID();
-  localStorage.setItem('kubiaka_reporter_id', reporterId);
-}
+// --- 通報者ID(他ページと同じキーで匿名・端末保存) ------------------------
+let reporterId = getReporterId();
+let authSession = null;
+const authReady = bootstrapAuth().then((r) => {
+  reporterId = r.reporterId;
+  authSession = r.session;
+});
 
 // --- 表示ラベル(review.html / map.html と共通の語彙) -------------------
 const FINDING = { frass: 'フラス', adult_alive: '成虫(生)', adult_dead: '成虫(死)',
@@ -134,6 +139,30 @@ function renderLedger(items) {
   }).join('');
 }
 
+function renderAccount() {
+  const el = $('account');
+  if (authSession) {
+    const label = authSession.display_name || authSession.email || 'ログイン中';
+    el.innerHTML = `<div class="row1"><span>ログイン中: ${escapeHtml(label)}</span>
+      <a href="#" id="logout-link">ログアウト</a></div>
+      <p class="memo">この端末はGoogleアカウントに連携済みです。他の端末でも同じアカウントで
+      ログインすると通報履歴が引き継がれます。</p>`;
+    $('logout-link').addEventListener('click', async (e) => {
+      e.preventDefault();
+      await fetch('/api/auth/logout');
+      // ログアウト後もこの端末は同じ reporter_id を覚えているので、明示的に
+      // 新しい匿名IDへ切り替えないと体感上「ログアウトした」ことにならない。
+      reporterId = crypto.randomUUID();
+      setReporterId(reporterId);
+      authSession = null;
+      renderAccount();
+      main().catch((e2) => { $('page-status').innerHTML = `<span class="warn">${e2.message}</span>`; });
+    });
+  } else {
+    el.innerHTML = `<a href="${googleLoginUrl(reporterId)}">Googleでログインして複数端末で同期する</a>`;
+  }
+}
+
 async function main() {
   $('page-status').textContent = '読み込み中...';
   const res = await fetch(`/api/mypage?reporter_id=${reporterId}`);
@@ -145,8 +174,12 @@ async function main() {
   renderLedger(j.point_events);
 }
 
-main().catch((e) => {
-  $('page-status').innerHTML = `<span class="warn">${e.message}</span>`;
+$('page-status').textContent = '読み込み中...';
+authReady.then(() => {
+  renderAccount();
+  main().catch((e) => {
+    $('page-status').innerHTML = `<span class="warn">${e.message}</span>`;
+  });
 });
 </script>
 </body>

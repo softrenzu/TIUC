@@ -16,6 +16,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const HOURLY_LIMIT = 30;
 const SESSION_HOURS = 12;
+const OAUTH_STATE_TTL_SEC = 300;
+const AUTH_SESSION_HOURS = 24 * 30;
 
 const bad = (error, status = 400) => Response.json({ ok: false, error }, { status });
 
@@ -81,6 +83,34 @@ async function readSession(request, env) {
     const data = JSON.parse(b64urlDecodeUtf8(payload));
     if (data.exp < Math.floor(Date.now() / 1000)) return null;
     return data.n;
+  } catch {
+    return null;
+  }
+}
+
+// =====================================================================
+// 通報者(市民)ログイン(任意)。ゲスト運用の上に追加するだけで、
+// ゲストの機能・データを一切制限しない。レビュアー認証(rv/REVIEW_SECRET)
+// とは信頼レベルも対象読者も別なので、Cookie名・秘密鍵ともに共用しない。
+// =====================================================================
+async function issueUserSession(reporterId, env) {
+  const payload = b64url(enc.encode(JSON.stringify({
+    r: reporterId, exp: Math.floor(Date.now() / 1000) + AUTH_SESSION_HOURS * 3600,
+  })));
+  return `${payload}.${await hmac(payload, env.AUTH_SECRET)}`;
+}
+
+async function readUserSession(request, env) {
+  const raw = readCookie(request, "uid");
+  if (!raw) return null;
+  const [payload, sig] = raw.split(".");
+  if (!payload || !sig) return null;
+  if (sig !== await hmac(payload, env.AUTH_SECRET)) return null;
+  try {
+    const data = JSON.parse(b64urlDecodeUtf8(payload));
+    if (data.exp < Math.floor(Date.now() / 1000)) return null;
+    if (!UUID_RE.test(data.r)) return null;
+    return data.r;
   } catch {
     return null;
   }
@@ -600,12 +630,178 @@ async function mypage(request, env) {
 }
 
 // =====================================================================
+// Google ログイン(任意)
+//   ゲストの唯一の弱点(端末をまたぐと reporter_id が引き継げない)を
+//   解消するためだけの機能。不正対策・レート制限には一切関与しない
+//   (それらは常にゲスト同様 reporter_id 単位で今まで通り適用される)。
+// =====================================================================
+function googleRedirectUri(request) {
+  // start と callback で必ず同じ文字列にする(Google はリテラル一致を要求する)。
+  // ヘルパーを共用することで自然に一致を保証する。
+  return new URL(request.url).origin + "/api/auth/google/callback";
+}
+
+async function googleAuthStart(request, env, cookieAttrs) {
+  const url = new URL(request.url);
+  const reporterId = String(url.searchParams.get("reporter_id") || "");
+  if (!UUID_RE.test(reporterId)) return bad("通報者IDが不正です");
+  if (!env.GOOGLE_CLIENT_ID) return bad("Googleログインは現在利用できません", 503);
+
+  const state = crypto.randomUUID();
+  const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+  authUrl.searchParams.set("client_id", env.GOOGLE_CLIENT_ID);
+  authUrl.searchParams.set("redirect_uri", googleRedirectUri(request));
+  authUrl.searchParams.set("response_type", "code");
+  authUrl.searchParams.set("scope", "openid email profile");
+  authUrl.searchParams.set("state", state);
+  authUrl.searchParams.set("access_type", "online");
+  authUrl.searchParams.set("prompt", "select_account");
+
+  return new Response(null, {
+    status: 302,
+    headers: {
+      location: authUrl.toString(),
+      // state と、開始時点のローカル reporter_id を1本の Cookie にまとめる
+      // (5分の短命 Cookie なのでサーバ側セッションストア不要)。
+      // SameSite=Lax が必須: Google からのコールバックはクロスサイト起点の
+      // トップレベル遷移なので、Strict だと Cookie が送られず毎回 CSRF
+      // チェックに落ちる(rv とはここが違う)。
+      "set-cookie": `oauth_state=${state}.${reporterId}; HttpOnly${cookieAttrs}; ` +
+        `SameSite=Lax; Path=/api/auth/google; Max-Age=${OAUTH_STATE_TTL_SEC}`,
+    },
+  });
+}
+
+async function googleAuthCallback(request, env, cookieAttrs) {
+  const url = new URL(request.url);
+  const code = url.searchParams.get("code");
+  const stateParam = url.searchParams.get("state");
+  if (!code || !stateParam) return bad("Googleログインに失敗しました", 400);
+
+  const raw = readCookie(request, "oauth_state");
+  if (!raw) return bad("ログインの有効期限が切れました。もう一度お試しください", 400);
+  const [cookieState, linkedReporterId] = raw.split(".");
+  if (!cookieState || cookieState !== stateParam || !UUID_RE.test(linkedReporterId || "")) {
+    return bad("不正なリクエストです", 400);
+  }
+
+  const clearState = `oauth_state=; HttpOnly${cookieAttrs}; SameSite=Lax; ` +
+    `Path=/api/auth/google; Max-Age=0`;
+
+  // --- 認可コードをトークンに交換(サーバ間・client_secret 認証済み) ---
+  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: env.GOOGLE_CLIENT_ID,
+      client_secret: env.GOOGLE_CLIENT_SECRET,
+      code,
+      redirect_uri: googleRedirectUri(request),
+      grant_type: "authorization_code",
+    }),
+  });
+  if (!tokenRes.ok) return bad("Googleとの認証に失敗しました", 502);
+  const token = await tokenRes.json();
+  if (!token.access_token) return bad("Googleとの認証に失敗しました", 502);
+
+  // --- ユーザー情報取得 ---
+  // id_token の署名検証はしない: このトークン交換自体が client_secret で
+  // サーバ間認証済みのため、直後に同じ Google へ問い合わせる userinfo の
+  // 応答をそのまま信頼して問題ない(クライアントが渡す id_token を
+  // 信用するわけではないので、JWT ライブラリは不要)。
+  const infoRes = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
+    headers: { authorization: `Bearer ${token.access_token}` },
+  });
+  if (!infoRes.ok) return bad("Googleとの認証に失敗しました", 502);
+  const info = await infoRes.json();
+  const sub = String(info.sub || "");
+  if (!sub) return bad("Googleとの認証に失敗しました", 502);
+  const email = info.email ? String(info.email) : null;
+  const emailVerified = info.email_verified === true;
+  const displayName = info.name ? String(info.name).slice(0, 80) : null;
+  const now = Math.floor(Date.now() / 1000);
+
+  const existing = await env.DB.prepare(
+    "SELECT id FROM reporters WHERE google_sub = ?1"
+  ).bind(sub).first();
+
+  let reporterId;
+  try {
+    if (existing) {
+      // 既にこの Google アカウントに紐づいた行がある = 別端末からの再ログイン。
+      // これが「複数端末で同じ reporter_id に戻れる」機能の核心。
+      reporterId = existing.id;
+      await env.DB.prepare(
+        `UPDATE reporters SET display_name = COALESCE(?2, display_name),
+                              email = COALESCE(?3, email),
+                              email_verified_at = CASE WHEN ?4 THEN ?5 ELSE email_verified_at END
+          WHERE id = ?1`
+      ).bind(reporterId, displayName, email, emailVerified ? 1 : 0, now).run();
+    } else {
+      // 初めてこの Google アカウントでログイン。開始時点のローカル reporter_id を
+      // そのまま行の ID として使う(既存のゲスト行があればその場でアップグレード。
+      // reports/point_events/reactions は reporter_id で紐づいているので
+      // ID を変えなければデータ移行は一切不要。行がまだ無ければ新規作成される)。
+      reporterId = linkedReporterId;
+      await env.DB.prepare(
+        `INSERT INTO reporters (id, google_sub, email, email_verified_at, display_name, created_at)
+         VALUES (?1,?2,?3,?4,?5,?6)
+         ON CONFLICT(id) DO UPDATE SET
+           google_sub = excluded.google_sub,
+           email = excluded.email,
+           email_verified_at = excluded.email_verified_at,
+           display_name = excluded.display_name`
+      ).bind(reporterId, sub, email, emailVerified ? now : null, displayName, now).run();
+    }
+  } catch (e) {
+    // email/google_sub の UNIQUE 制約衝突(別の行が同じメールを持っている、
+    // または同時ログインの競合)はここに来る。ON CONFLICT(id) は id 以外の
+    // 一意制約違反を吸収しないため、明示的に拾って綺麗に失敗させる。
+    console.error(e);
+    return new Response(null, {
+      status: 302,
+      headers: { location: "/mypage.html?auth_error=1", "set-cookie": clearState },
+    });
+  }
+
+  const cookie = await issueUserSession(reporterId, env);
+  const headers = new Headers({ location: "/mypage.html" });
+  // 1レスポンスで複数 Cookie を扱うには Headers.append を使う
+  // (オブジェクトリテラルでは同名キーを2つ持てず、カンマ結合は Set-Cookie の
+  // 仕様上安全でない — Expires の値自体にカンマを含むため)。
+  headers.append("set-cookie", clearState);
+  headers.append("set-cookie",
+    `uid=${cookie}; HttpOnly${cookieAttrs}; SameSite=Strict; Path=/; Max-Age=${AUTH_SESSION_HOURS * 3600}`);
+  return new Response(null, { status: 302, headers });
+}
+
+async function authMe(request, env) {
+  const reporterId = await readUserSession(request, env);
+  if (!reporterId) return Response.json({ ok: false });
+
+  // google_sub IS NOT NULL も併せて確認: 将来の連携解除機能に備えた防御的チェック
+  const row = await env.DB.prepare(
+    "SELECT display_name, email FROM reporters WHERE id = ?1 AND google_sub IS NOT NULL"
+  ).bind(reporterId).first();
+  if (!row) return Response.json({ ok: false });
+
+  return Response.json({
+    ok: true, reporter_id: reporterId,
+    display_name: row.display_name, email: row.email,
+  });
+}
+
+// =====================================================================
 // ルーティング
 // =====================================================================
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
+    // Secure 属性は HTTPS の時だけ付ける。
+    // wrangler dev はローカルで http のため、Safari は Secure Cookie を
+    // localhost であっても保存しない(Chrome は例外扱いするが Safari はしない)。
+    const cookieAttrs = url.protocol === "https:" ? "; Secure" : "";
 
     try {
       // --- 通報 ---
@@ -633,10 +829,24 @@ export default {
         return await mypage(request, env);
       }
 
-      // Secure 属性は HTTPS の時だけ付ける。
-      // wrangler dev はローカルで http のため、Safari は Secure Cookie を
-      // localhost であっても保存しない(Chrome は例外扱いするが Safari はしない)。
-      const cookieAttrs = url.protocol === "https:" ? "; Secure" : "";
+      // --- Google ログイン(任意。ゲストと並行して使える) ---
+      if (path === "/api/auth/google/start" && request.method === "GET") {
+        return await googleAuthStart(request, env, cookieAttrs);
+      }
+      if (path === "/api/auth/google/callback" && request.method === "GET") {
+        return await googleAuthCallback(request, env, cookieAttrs);
+      }
+      if (path === "/api/auth/me" && request.method === "GET") {
+        return await authMe(request, env);
+      }
+      if (path === "/api/auth/logout") {
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: {
+            "content-type": "application/json",
+            "set-cookie": `uid=; HttpOnly${cookieAttrs}; SameSite=Strict; Path=/; Max-Age=0`,
+          },
+        });
+      }
 
       // --- レビュアーのログイン ---
       if (path === "/api/review/login" && request.method === "POST") {

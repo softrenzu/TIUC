@@ -76,15 +76,14 @@
 
 <script type="module">
 import { meshGrid, meshGridCount, meshBounds } from './mesh.js';
+import { getReporterId, bootstrapAuth } from './auth.js';
 
 const $ = (id) => document.getElementById(id);
 
-// --- 通報者ID(index.html と同じキーで匿名・端末保存) --------------------
-let reporterId = localStorage.getItem('kubiaka_reporter_id');
-if (!reporterId) {
-  reporterId = crypto.randomUUID();
-  localStorage.setItem('kubiaka_reporter_id', reporterId);
-}
+// --- 通報者ID(他ページと同じキーで匿名・端末保存。Googleログイン済みなら
+//     端末間で同じIDに揃う) -------------------------------------------
+let reporterId = getReporterId();
+const authReady = bootstrapAuth().then((r) => { reporterId = r.reporterId; });
 
 // スタンプ済みかどうかをローカルにも記録し、リロード後の見た目上の連打を防ぐ
 // (サーバ側は複合主キーで実害なく防げているが、UI 上の混乱を避けるため)。
@@ -320,6 +319,7 @@ async function main() {
       btn.disabled = true;
       msgEl.textContent = '';
       try {
+        await authReady;
         const res = await fetch('/api/reactions', {
           method: 'POST', headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ reporter_id: reporterId, report_id: reportId, kind }),

@@ -90,6 +90,13 @@ reports.response_status: null / scheduled / treating / done(現地の対応状�
 **本番運用前に Cloudflare Access へ移す**。ただし Access は独自ドメインが必要で workers.dev には
 掛けられない。自治体連携が具体化したらドメイン取得(年約1,500円)→ Access へ移行。
 
+通報者(市民)側は**Googleログインが任意**で使える(`GET /api/auth/google/start`〜
+`/callback`、`GET /api/auth/me`、`GET /api/auth/logout`)。ゲスト(匿名UUID)運用は完全に維持しており、
+ログインで変わるのは「端末をまたいで同じ通報者に戻れる」ことだけ(不正対策・レート制限には関与しない)。
+Cookie名`uid`・秘密鍵`env.AUTH_SECRET`はレビュアー用の`rv`/`REVIEW_SECRET`とは完全に別(信頼レベルが違うため共用しない)。
+既知の制約: 実データを持つ複数のゲスト端末を後から同じGoogleアカウントに統合(マージ)する機能は無い
+(先にログインした端末の履歴が残り、別端末の履歴は表示されなくなる)。
+
 ## 現在地(2026-07 時点)
 
 完了: 通報フォーム(地図タップでの位置指定フォールバック込み) / 通報受付 API / R2保存 / D1登録 /
@@ -97,7 +104,8 @@ reports.response_status: null / scheduled / treating / done(現地の対応状�
       `GET /api/map`、mesh3/mesh4/mesh5の3段階ズーム対応、未調査エリアの目安表示※、徒歩スケールの
       確認済みエリア円表示、Googleマップ経路検索連携) / スタンプ(seen_too・thanks、
       `POST /api/reactions`、通報フォームでの近隣重複確認 `GET /api/nearby` 込み) /
-      通報者マイページ(`GET /api/mypage`) / ランディングページ(`/`)。
+      通報者マイページ(`GET /api/mypage`) / ランディングページ(`/`) /
+      通報者向けGoogleログイン(任意、ゲスト併存)。
 未着手: AI一次判定 / チーム機能 / Cloudflare Access 移行 / 独自ドメイン。
 
 ※ 未調査エリア表示は `survey_mesh`(自治体の調査対象データ)未整備のため、「bboxを現在のズーム粒度
