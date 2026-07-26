@@ -7,25 +7,48 @@
 <style>
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; font-family: system-ui, -apple-system, sans-serif; color: #222; }
-  #map { position: absolute; inset: 0; }
+  #map { position: absolute; left: 0; right: 0; bottom: 0; top: 52px; }
 
-  .panel { position: absolute; z-index: 1; background: #fff; border: 1px solid #ddd;
-           border-radius: 10px; padding: 12px; font-size: 13px; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
-  #filters { top: 12px; left: 12px; width: 240px; }
-  #filters h1 { font-size: 14px; margin: 0 0 8px; }
-  #filters .row { margin-bottom: 8px; }
-  #filters label.date { display: block; color: #666; margin-bottom: 2px; }
-  #filters input[type=date] { width: 100%; font-size: 13px; padding: 4px; border: 1px solid #ddd;
-                               border-radius: 6px; }
-  #filters .resp label { display: flex; align-items: center; gap: 6px; padding: 2px 0; cursor: pointer; }
-  #legend { bottom: 24px; left: 12px; width: 200px; }
-  #legend h2 { font-size: 12px; color: #666; margin: 0 0 6px; font-weight: 500; }
-  #legend .swatches { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; }
+  /* 凡例・フィルタは常設パネルではなく、上部バーのアイコンからの折りたたみに変更。
+     スマホの狭い画面で地図に被って見づらいという問題への対応。 */
+  #topbar { position: absolute; z-index: 2; top: 0; left: 0; right: 0; height: 52px;
+            background: #fff; border-bottom: 1px solid #ddd; box-shadow: 0 1px 4px rgba(0,0,0,.08);
+            display: flex; align-items: center; gap: 6px; padding: 0 10px; }
+  #topbar .back { font-size: 12px; color: #666; white-space: nowrap; text-decoration: none; flex: none; }
+  #topbar h1 { font-size: 14px; margin: 0; flex: 1; min-width: 0; overflow: hidden;
+               text-overflow: ellipsis; white-space: nowrap; }
+  #status-msg { font-size: 11px; color: #666; white-space: nowrap; flex: none; }
+  .icon-btn { flex: none; display: flex; align-items: center; gap: 4px; font-size: 12px;
+              background: #f5f5f4; border: 1px solid #ddd; border-radius: 8px;
+              padding: 6px 10px; cursor: pointer; color: #222; }
+  .icon-btn.active { background: #2a2a28; color: #fff; border-color: #2a2a28; }
+  .icon-btn .glyph { font-size: 14px; line-height: 1; }
+
+  .dropdown { position: absolute; z-index: 1; top: 52px; right: 10px;
+              width: min(300px, calc(100vw - 20px)); max-height: calc(100vh - 72px); overflow-y: auto;
+              background: #fff; border: 1px solid #ddd; border-radius: 10px; padding: 14px;
+              font-size: 13px; box-shadow: 0 4px 16px rgba(0,0,0,.15); display: none; }
+  .dropdown.open { display: block; }
+  .dropdown h2 { font-size: 12px; color: #666; margin: 14px 0 6px; font-weight: 500; }
+  .dropdown h2:first-child { margin-top: 0; }
+
+  #search .row { margin-bottom: 10px; }
+  #search label.date { display: block; color: #666; margin-bottom: 2px; }
+  #search input[type=date] { width: 100%; font-size: 13px; padding: 5px; border: 1px solid #ddd;
+                              border-radius: 6px; }
+  #search .place-row { display: flex; gap: 6px; }
+  #search .place-row input[type=text] { flex: 1; font-size: 13px; padding: 6px; border: 1px solid #ddd;
+                                         border-radius: 6px; min-width: 0; }
+  #search .place-row button { font-size: 12px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px;
+                               background: #f5f5f4; cursor: pointer; }
+  #search .place-msg { font-size: 11px; color: #a33; margin: 4px 0 0; min-height: 1.2em; }
+  #search .resp label { display: flex; align-items: center; gap: 6px; padding: 2px 0; cursor: pointer; }
+
+  #legend .swatches { display: flex; flex-direction: column; gap: 3px; margin-bottom: 4px; }
   #legend .sw { display: flex; align-items: center; gap: 6px; font-size: 12px; }
   #legend .sw i.box { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
   #legend .sw i.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block;
                        border: 1.5px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.15); }
-  #status { position: absolute; z-index: 1; top: 12px; right: 12px; font-size: 12px; color: #666; }
 
   .maplibregl-popup-content { font-size: 13px; padding: 10px 12px; }
   .maplibregl-popup-content table { border-collapse: collapse; }
@@ -41,19 +64,34 @@
 
 <div id="map"></div>
 
-<div id="filters" class="panel">
-  <p style="margin:0 0 6px"><a href="/" style="font-size:12px">← トップに戻る</a></p>
+<div id="topbar">
+  <a class="back" href="/">← トップ</a>
   <h1>クビアカツヤカミキリ 被害マップ</h1>
+  <span id="status-msg"></span>
+  <button type="button" id="search-toggle" class="icon-btn"><span class="glyph">🔍</span>詳細検索</button>
+  <button type="button" id="legend-toggle" class="icon-btn"><span class="glyph">🗂</span>凡例</button>
+</div>
+
+<div id="search" class="dropdown">
+  <h2>エリアを検索</h2>
+  <div class="place-row">
+    <input type="text" id="place-q" placeholder="地名・住所(例: 新宿区)">
+    <button type="button" id="place-go">検索</button>
+  </div>
+  <p class="place-msg" id="place-msg"></p>
+
+  <h2>期間</h2>
   <div class="row">
-    <label class="date" for="from">期間(はじめ)</label>
+    <label class="date" for="from">はじめ</label>
     <input id="from" type="date">
   </div>
   <div class="row">
-    <label class="date" for="to">期間(おわり)</label>
+    <label class="date" for="to">おわり</label>
     <input id="to" type="date">
   </div>
+
+  <h2>対応状況</h2>
   <div class="row resp">
-    <span style="color:#666">対応状況</span>
     <label><input type="checkbox" value="none" checked> 未対応</label>
     <label><input type="checkbox" value="scheduled" checked> 対応予定</label>
     <label><input type="checkbox" value="treating" checked> 対応中</label>
@@ -61,7 +99,7 @@
   </div>
 </div>
 
-<div id="legend" class="panel">
+<div id="legend" class="dropdown">
   <h2>通報件数(メッシュ集計)</h2>
   <div class="swatches" id="mesh-legend"></div>
   <h2>対応状況(公有地・被害確定のみピン表示)</h2>
@@ -71,8 +109,6 @@
   <p id="unsurveyed-hint" style="margin:4px 0 0;font-size:11px;color:#666" hidden></p>
   <div class="swatches" id="coverage-legend" style="margin-top:6px"></div>
 </div>
-
-<div id="status" class="panel" style="display:none"></div>
 
 <script type="module">
 import { meshGrid, meshGridCount, meshBounds } from './mesh.js';
@@ -112,14 +148,17 @@ const jst = (t) => t ? new Date(t * 1000).toLocaleDateString('ja-JP',
 const googleMapsUrl = (lat, lng) =>
   `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
 
-// --- 配色(dataviz スキルの sequential blue ランプ / status パレットをそのまま使用) ---
+// --- 配色(dataviz スキルで検証した sequential red ランプ / status パレットをそのまま使用) ---
+// 青系は視認性が悪いとのフィードバックにより赤系へ変更。5段階・単一色相・明度単調増加を
+// scripts/validate_palette.js --ordinal で確認済み(浅い側の2:1コントラストは、0件セルが
+// 背景に馴染んで見えるsequentialランプの正常な挙動なのでFAILのままでよい)。
 // 件数のしきい値(1/3/6/12)は現状のデータ量に基づく仮置き。実データを見て調整する。
 const MESH_STEPS = [
-  { max: 0,  color: '#cde2fb', label: '0件' },
-  { max: 2,  color: '#9ec5f4', label: '1〜2件' },
-  { max: 5,  color: '#5598e7', label: '3〜5件' },
-  { max: 11, color: '#2a78d6', label: '6〜11件' },
-  { max: Infinity, color: '#184f95', label: '12件以上' },
+  { max: 0,  color: '#fbdad7', label: '0件' },
+  { max: 2,  color: '#f2a9a3', label: '1〜2件' },
+  { max: 5,  color: '#e2726a', label: '3〜5件' },
+  { max: 11, color: '#c73f36', label: '6〜11件' },
+  { max: Infinity, color: '#8f1f1a', label: '12件以上' },
 ];
 const STATUS_COLOR = { none: '#d03b3b', scheduled: '#fab219', treating: '#ec835a', done: '#0ca30c' };
 const STATUS_LABEL = { none: '未対応', scheduled: '対応予定', treating: '対応中', done: '対応済み' };
@@ -170,10 +209,28 @@ const MESH5_MIN_ZOOM = 12;
 const COVERAGE_MIN_ZOOM = 15;
 
 function setStatus(text) {
-  const el = $('status');
-  el.textContent = text;
-  el.style.display = text ? 'block' : 'none';
+  $('status-msg').textContent = text || '';
 }
+
+// --- 凡例・詳細検索ドロップダウン(排他的に開閉、外側クリックで閉じる) --------------
+function closeDropdowns() {
+  $('search').classList.remove('open');
+  $('legend').classList.remove('open');
+  $('search-toggle').classList.remove('active');
+  $('legend-toggle').classList.remove('active');
+}
+function toggleDropdown(panelId, btnId) {
+  const opening = !$(panelId).classList.contains('open');
+  closeDropdowns();
+  if (opening) {
+    $(panelId).classList.add('open');
+    $(btnId).classList.add('active');
+  }
+}
+$('search-toggle').addEventListener('click', (e) => { e.stopPropagation(); toggleDropdown('search', 'search-toggle'); });
+$('legend-toggle').addEventListener('click', (e) => { e.stopPropagation(); toggleDropdown('legend', 'legend-toggle'); });
+document.querySelectorAll('.dropdown').forEach((el) => el.addEventListener('click', (e) => e.stopPropagation()));
+document.addEventListener('click', closeDropdowns);
 
 async function main() {
   await loadMapLibre();
@@ -185,7 +242,9 @@ async function main() {
       sources: {
         gsi: {
           type: 'raster',
-          tiles: ['https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png'],
+          // 淡色地図は地味で見づらいというフィードバックにより標準地図に変更(Google Mapsは
+          // CLAUDE.mdの方針により不採用。国土地理院タイルの範囲内で見やすさを改善する)。
+          tiles: ['https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png'],
           tileSize: 256,
           maxzoom: 18,
           attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" ' +
@@ -219,19 +278,19 @@ async function main() {
       paint: {
         'fill-color': [
           'step', ['get', 'damage_reports'],
-          '#cde2fb',
-          1, '#9ec5f4',
-          3, '#5598e7',
-          6, '#2a78d6',
-          12, '#184f95',
+          '#fbdad7',
+          1, '#f2a9a3',
+          3, '#e2726a',
+          6, '#c73f36',
+          12, '#8f1f1a',
         ],
-        'fill-opacity': 0.55,
+        'fill-opacity': 0.6,
       },
     });
     map.addLayer({
       id: 'mesh-outline', type: 'line', source: 'kubiaka',
       filter: ['==', ['get', 'kind'], 'mesh'],
-      paint: { 'line-color': '#184f95', 'line-opacity': 0.5, 'line-width': 1 },
+      paint: { 'line-color': '#8f1f1a', 'line-opacity': 0.5, 'line-width': 1 },
     });
     map.addLayer({
       id: 'coverage-circle', type: 'circle', source: 'kubiaka',
@@ -340,7 +399,7 @@ async function main() {
 
   // --- データ取得 -------------------------------------------------------
   function checkedResponses() {
-    return [...document.querySelectorAll('#filters .resp input:checked')].map((el) => el.value);
+    return [...document.querySelectorAll('#search .resp input:checked')].map((el) => el.value);
   }
 
   function dateToUnix(value, endOfDay) {
@@ -427,8 +486,33 @@ async function main() {
     debounceTimer = setTimeout(refresh, 300);
   }
   map.on('moveend', scheduleRefresh);
-  document.querySelectorAll('#filters input').forEach((el) => {
+  document.querySelectorAll('#search input[type=date], #search .resp input').forEach((el) => {
     el.addEventListener('change', scheduleRefresh);
+  });
+
+  // --- エリア検索(国土地理院 住所検索API。APIキー不要・CORS許可済み) -----------------
+  // 通報データではなく地名の座標を引くだけなので、rule1の座標非公開ルールとは無関係。
+  async function searchPlace() {
+    const q = $('place-q').value.trim();
+    const msg = $('place-msg');
+    msg.textContent = '';
+    if (!q) return;
+    msg.textContent = '検索中...';
+    try {
+      const res = await fetch(`https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(q)}`);
+      if (!res.ok) throw new Error('検索に失敗しました');
+      const results = await res.json();
+      if (!results.length) { msg.textContent = '見つかりませんでした'; return; }
+      const [lng, lat] = results[0].geometry.coordinates;
+      map.flyTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 14) });
+      msg.textContent = '';
+    } catch (e) {
+      msg.textContent = e.message;
+    }
+  }
+  $('place-go').addEventListener('click', searchPlace);
+  $('place-q').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); searchPlace(); }
   });
 }
 
