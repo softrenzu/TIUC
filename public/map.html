@@ -7,25 +7,37 @@
 <style>
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; font-family: system-ui, -apple-system, sans-serif; color: #222; }
-  #map { position: absolute; left: 0; right: 0; bottom: 0; top: 52px; }
+  #map { position: absolute; left: 0; right: 0; bottom: 0; top: 88px; }
 
-  /* 凡例・フィルタは常設パネルではなく、上部バーのアイコンからの折りたたみに変更。
-     スマホの狭い画面で地図に被って見づらいという問題への対応。 */
-  #topbar { position: absolute; z-index: 2; top: 0; left: 0; right: 0; height: 52px;
+  /* 凡例・詳細フィルタは折りたたみだが、エリア検索は常時入力できる状態を維持する
+     (スマホの狭い画面で地図に被って見づらいという問題への対応)。 */
+  #topbar { position: absolute; z-index: 2; top: 0; left: 0; right: 0;
             background: #fff; border-bottom: 1px solid #ddd; box-shadow: 0 1px 4px rgba(0,0,0,.08);
-            display: flex; align-items: center; gap: 6px; padding: 0 10px; }
+            display: flex; flex-direction: column; gap: 8px; padding: 8px 10px; }
+  #topbar-row1 { display: flex; align-items: center; gap: 6px; height: 28px; }
+  #topbar-row2 { display: flex; align-items: center; gap: 6px; height: 36px; }
   #topbar .back { font-size: 12px; color: #666; white-space: nowrap; text-decoration: none; flex: none; }
   #topbar h1 { font-size: 14px; margin: 0; flex: 1; min-width: 0; overflow: hidden;
                text-overflow: ellipsis; white-space: nowrap; }
   #status-msg { font-size: 11px; color: #666; white-space: nowrap; flex: none; }
   .icon-btn { flex: none; display: flex; align-items: center; gap: 4px; font-size: 12px;
               background: #f5f5f4; border: 1px solid #ddd; border-radius: 8px;
-              padding: 6px 10px; cursor: pointer; color: #222; }
+              padding: 0 10px; height: 34px; cursor: pointer; color: #222; }
   .icon-btn.active { background: #2a2a28; color: #fff; border-color: #2a2a28; }
   .icon-btn .glyph { font-size: 14px; line-height: 1; }
 
-  .dropdown { position: absolute; z-index: 1; top: 52px; right: 10px;
-              width: min(300px, calc(100vw - 20px)); max-height: calc(100vh - 72px); overflow-y: auto;
+  #place-row { display: flex; gap: 6px; flex: 1 1 auto; min-width: 0; height: 100%; }
+  #place-row input[type=text] { flex: 1 1 auto; min-width: 40px; font-size: 13px; padding: 0 8px;
+                                 border: 1px solid #ddd; border-radius: 8px; }
+  #place-row button { flex: none; font-size: 12px; padding: 0 10px; border: 1px solid #ddd;
+                       border-radius: 8px; background: #f5f5f4; cursor: pointer; }
+  #place-msg { position: absolute; z-index: 1; top: 88px; left: 10px; right: 10px; margin: 0;
+               font-size: 11px; color: #a33; background: #fff; border-radius: 0 0 8px 8px;
+               padding: 4px 6px; box-shadow: 0 2px 4px rgba(0,0,0,.1); }
+  #place-msg:empty { display: none; }
+
+  .dropdown { position: absolute; z-index: 1; top: 88px; right: 10px;
+              width: min(300px, calc(100vw - 20px)); max-height: calc(100vh - 116px); overflow-y: auto;
               background: #fff; border: 1px solid #ddd; border-radius: 10px; padding: 14px;
               font-size: 13px; box-shadow: 0 4px 16px rgba(0,0,0,.15); display: none; }
   .dropdown.open { display: block; }
@@ -36,12 +48,6 @@
   #search label.date { display: block; color: #666; margin-bottom: 2px; }
   #search input[type=date] { width: 100%; font-size: 13px; padding: 5px; border: 1px solid #ddd;
                               border-radius: 6px; }
-  #search .place-row { display: flex; gap: 6px; }
-  #search .place-row input[type=text] { flex: 1; font-size: 13px; padding: 6px; border: 1px solid #ddd;
-                                         border-radius: 6px; min-width: 0; }
-  #search .place-row button { font-size: 12px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px;
-                               background: #f5f5f4; cursor: pointer; }
-  #search .place-msg { font-size: 11px; color: #a33; margin: 4px 0 0; min-height: 1.2em; }
   #search .resp label { display: flex; align-items: center; gap: 6px; padding: 2px 0; cursor: pointer; }
 
   #legend .swatches { display: flex; flex-direction: column; gap: 3px; margin-bottom: 4px; }
@@ -65,21 +71,23 @@
 <div id="map"></div>
 
 <div id="topbar">
-  <a class="back" href="/">← トップ</a>
-  <h1>クビアカツヤカミキリ 被害マップ</h1>
-  <span id="status-msg"></span>
-  <button type="button" id="search-toggle" class="icon-btn"><span class="glyph">🔍</span>詳細検索</button>
-  <button type="button" id="legend-toggle" class="icon-btn"><span class="glyph">🗂</span>凡例</button>
+  <div id="topbar-row1">
+    <a class="back" href="/">← トップ</a>
+    <h1>クビアカツヤカミキリ 被害マップ</h1>
+    <span id="status-msg"></span>
+  </div>
+  <div id="topbar-row2">
+    <div id="place-row">
+      <input type="text" id="place-q" placeholder="地名・住所で検索(例: 新宿区)">
+      <button type="button" id="place-go">検索</button>
+    </div>
+    <button type="button" id="search-toggle" class="icon-btn"><span class="glyph">⚙️</span>詳細</button>
+    <button type="button" id="legend-toggle" class="icon-btn"><span class="glyph">🗂</span>凡例</button>
+  </div>
 </div>
+<p id="place-msg"></p>
 
 <div id="search" class="dropdown">
-  <h2>エリアを検索</h2>
-  <div class="place-row">
-    <input type="text" id="place-q" placeholder="地名・住所(例: 新宿区)">
-    <button type="button" id="place-go">検索</button>
-  </div>
-  <p class="place-msg" id="place-msg"></p>
-
   <h2>期間</h2>
   <div class="row">
     <label class="date" for="from">はじめ</label>

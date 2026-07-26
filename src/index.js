@@ -589,8 +589,9 @@ async function createReaction(request, env) {
 // =====================================================================
 // マイページ(通報者本人の履歴)
 //   nearbyCheck/createReaction と同じ信頼モデル: reporter_id を知っている
-//   ことのみを根拠に、その reporter_id の履歴を返す。写真は一切含めない
-//   (/img/ はレビュアー認証必須のまま。CLAUDE.md ルール1に例外は設けない)。
+//   ことのみを根拠に、その reporter_id の履歴を返す。写真(thumb_key/image_key)は
+//   本人確認用のキーとしてのみ返す。実際の画像取得は /img/ 側で reporter_id の
+//   一致を再検証してから許可する(下記ルーティングのコメント参照)。
 // =====================================================================
 async function mypage(request, env) {
   const url = new URL(request.url);
@@ -604,7 +605,7 @@ async function mypage(request, env) {
     ).bind(reporterId).first(),
     env.DB.prepare(
       `SELECT id, created_at, observed_at, finding, tree_species, note, status,
-              land_type, response_status, response_note
+              land_type, response_status, response_note, thumb_key
          FROM reports
         WHERE reporter_id = ?1
         ORDER BY created_at DESC
@@ -824,7 +825,7 @@ export default {
         return await createReaction(request, env);
       }
 
-      // --- マイページ(reporter_id の一致のみで閲覧可。/img/ は含めない) ---
+      // --- マイページ(reporter_id の一致のみで閲覧可。写真本体は /img/ 側で再検証) ---
       if (path === "/api/mypage" && request.method === "GET") {
         return await mypage(request, env);
       }
@@ -882,7 +883,7 @@ export default {
       }
 
       // --- ここから先はレビュアー限定 ---
-      if (path.startsWith("/api/review/") || path.startsWith("/img/")) {
+      if (path.startsWith("/api/review/")) {
         const reviewer = await readSession(request, env);
         if (!reviewer) return bad("ログインが必要です", 401);
 
@@ -890,17 +891,34 @@ export default {
         if (path === "/api/review/decide" && request.method === "POST") {
           return await reviewDecide(request, env, reviewer);
         }
+      }
 
-        if (path.startsWith("/img/")) {
-          const key = decodeURIComponent(path.slice(5));
-          const obj = await env.PHOTOS.get(key);
-          if (!obj) return new Response("not found", { status: 404 });
-          const headers = new Headers();
-          obj.writeHttpMetadata(headers);
-          headers.set("etag", obj.httpEtag);
-          headers.set("cache-control", "private, max-age=3600");
-          return new Response(obj.body, { headers });
+      // --- 画像配信: レビュアー、または通報者本人(reporter_id が一致する場合)のみ ---
+      //   本人閲覧は mypage と同じ信頼モデル(reporter_id を知っていることが根拠)。
+      //   image_key/thumb_key 自体に通報IDが埋め込まれ推測不能なため、両方が一致する
+      //   ケースだけを許可しても既存の露出面(reporter_id を知っていれば /api/mypage で
+      //   履歴が見える)より広がらない。
+      if (path.startsWith("/img/")) {
+        const key = decodeURIComponent(path.slice(5));
+        let authorized = !!(await readSession(request, env));
+        if (!authorized) {
+          const reporterId = String(url.searchParams.get("reporter_id") || "");
+          if (UUID_RE.test(reporterId)) {
+            const row = await env.DB.prepare(
+              "SELECT 1 FROM reports WHERE (image_key = ?1 OR thumb_key = ?1) AND reporter_id = ?2"
+            ).bind(key, reporterId).first();
+            authorized = !!row;
+          }
         }
+        if (!authorized) return bad("アクセスできません", 401);
+
+        const obj = await env.PHOTOS.get(key);
+        if (!obj) return new Response("not found", { status: 404 });
+        const headers = new Headers();
+        obj.writeHttpMetadata(headers);
+        headers.set("etag", obj.httpEtag);
+        headers.set("cache-control", "private, max-age=3600");
+        return new Response(obj.body, { headers });
       }
 
       if (path === "/api/health") {

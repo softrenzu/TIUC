@@ -35,6 +35,21 @@
   .status { font-size: 13px; color: var(--muted); }
   .warn { color: var(--warn); }
   .mono { font-family: ui-monospace, monospace; }
+
+  #reports .card { cursor: pointer; }
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex;
+                     align-items: center; justify-content: center; padding: 16px; z-index: 10; }
+  .modal-backdrop[hidden] { display: none; }
+  .modal-card { background: #fff; border-radius: 12px; max-width: 420px; width: 100%;
+                max-height: 90vh; overflow-y: auto; position: relative; padding: 16px; }
+  .modal-close { position: absolute; top: 8px; right: 8px; border: none; background: none;
+                 font-size: 22px; cursor: pointer; color: #666; line-height: 1; padding: 4px; }
+  .modal-card img { width: 100%; aspect-ratio: 4/3; object-fit: cover; background: #eee;
+                     border-radius: 8px; margin-bottom: 12px; display: block; }
+  .detail-row { display: flex; justify-content: space-between; font-size: 13px; padding: 5px 0;
+                border-bottom: 1px solid var(--line); gap: 12px; }
+  .detail-row:last-child { border-bottom: 0; }
+  .detail-row span:first-child { color: var(--muted); flex: none; }
 </style>
 <body>
 
@@ -53,6 +68,14 @@
 <div id="ledger"></div>
 
 <p class="status" id="page-status"></p>
+
+<div id="detail-modal" class="modal-backdrop" hidden>
+  <div class="modal-card">
+    <button type="button" id="detail-close" class="modal-close" aria-label="閉じる">×</button>
+    <img id="detail-img" alt="通報時の写真">
+    <div id="detail-body"></div>
+  </div>
+</div>
 
 <script type="module">
 import { getReporterId, bootstrapAuth, googleLoginUrl, setReporterId } from './auth.js';
@@ -101,7 +124,9 @@ function renderStats(s) {
     <div class="stat"><div class="n">${s.rejected_count}</div><div class="label">該当なし</div></div>`;
 }
 
+let currentReports = [];
 function renderReports(items) {
+  currentReports = items;
   if (!items.length) {
     $('reports').innerHTML = '<p class="empty">まだ通報がありません。</p>';
     return;
@@ -110,7 +135,7 @@ function renderReports(items) {
     const badgeClass = STATUS_CLASS[r.status] || '';
     const respLabel = r.response_status ? RESPONSE_LABEL[r.response_status] : null;
     return `
-    <div class="card">
+    <div class="card" data-id="${r.id}">
       <div class="row1">
         <span>${FINDING[r.finding] || r.finding} / ${SPECIES[r.tree_species] || '—'}</span>
         <span class="badge ${badgeClass}">${STATUS_LABEL[r.status] || r.status}</span>
@@ -121,6 +146,37 @@ function renderReports(items) {
     </div>`;
   }).join('');
 }
+
+// --- 通報詳細(タップで開く。写真は本人限定の /img/ アクセス経路を使う) ------------
+const LAND_TYPE_LABEL = { public: '公有地', private: '私有地' };
+
+function openDetail(r) {
+  $('detail-img').src = `/img/${r.thumb_key}?reporter_id=${encodeURIComponent(reporterId)}`;
+  const respLabel = r.response_status ? RESPONSE_LABEL[r.response_status] : null;
+  $('detail-body').innerHTML = `
+    <div class="detail-row"><span>発見物</span><span>${FINDING[r.finding] || r.finding}</span></div>
+    <div class="detail-row"><span>樹種</span><span>${SPECIES[r.tree_species] || '—'}</span></div>
+    <div class="detail-row"><span>日時</span><span>${jst(r.observed_at || r.created_at)}</span></div>
+    <div class="detail-row"><span>状態</span><span>${STATUS_LABEL[r.status] || r.status}</span></div>
+    ${respLabel ? `<div class="detail-row"><span>対応状況</span><span>${respLabel}</span></div>` : ''}
+    ${LAND_TYPE_LABEL[r.land_type] ? `<div class="detail-row"><span>土地</span><span>${LAND_TYPE_LABEL[r.land_type]}</span></div>` : ''}
+    ${r.note ? `<div class="memo" style="margin-top:8px">${escapeHtml(r.note)}</div>` : ''}
+    ${r.response_note ? `<div class="note" style="margin-top:8px">${escapeHtml(r.response_note)}</div>` : ''}
+  `;
+  $('detail-modal').hidden = false;
+}
+function closeDetail() { $('detail-modal').hidden = true; }
+
+$('reports').addEventListener('click', (e) => {
+  const card = e.target.closest('.card[data-id]');
+  if (!card) return;
+  const r = currentReports.find((x) => x.id === card.dataset.id);
+  if (r) openDetail(r);
+});
+$('detail-close').addEventListener('click', closeDetail);
+$('detail-modal').addEventListener('click', (e) => {
+  if (e.target === $('detail-modal')) closeDetail();
+});
 
 function renderLedger(items) {
   if (!items.length) {
