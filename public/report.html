@@ -494,6 +494,9 @@ $('reject-retake').addEventListener('click', (e) => {
   $('submit-status').textContent = '';
   refresh();
   $('file').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  // ユーザー操作(このクリック)の直後・同期的な呼び出しなので、iOS Safari 等でも
+  // ブロックされずファイル選択(カメラ起動)がそのまま開く。
+  $('file').click();
 });
 
 $('reject-force').addEventListener('click', async () => {
