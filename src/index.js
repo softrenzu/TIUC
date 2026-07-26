@@ -11,6 +11,9 @@ const LOC_SOURCES = new Set(["exif", "geolocation", "manual"]);
 const MAP_LEVELS = new Set(["mesh3", "mesh4", "mesh5"]);
 const RESPONSE_BUCKETS = new Set(["none", "scheduled", "treating", "done"]);
 const REACTION_KINDS = new Set(["seen_too", "thanks"]);
+// 人がまだ判定していない状態。通報者本人による削除・軽い修正はここまでのみ許可する
+// (確定済みの公式記録を後から自己書き換えさせるのはデータの信頼性上不適切なため)。
+const UNREVIEWED_STATUSES = new Set(["queued", "auto_rejected", "pending_review", "provisional"]);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
@@ -631,6 +634,79 @@ async function mypage(request, env) {
 }
 
 // =====================================================================
+// 通報者本人による削除・軽い修正
+//   誤報の訂正用。まだ人がレビューしていない通報のみが対象(UNREVIEWED_STATUSES)。
+//   mypage と同じ信頼モデル(reporter_id の一致のみが根拠)。
+// =====================================================================
+async function editOwnReport(request, env) {
+  const body = await request.json();
+  const id = String(body.report_id || "");
+  const reporterId = String(body.reporter_id || "");
+  if (!UUID_RE.test(reporterId)) return bad("通報者IDが不正です");
+
+  const finding = String(body.finding || "");
+  if (!FINDINGS.has(finding)) return bad("発見物の指定が不正です");
+  const species = String(body.tree_species || "unknown");
+  if (!SPECIES.has(species)) return bad("樹種の指定が不正です");
+  const note = String(body.note || "").trim().slice(0, 500) || null;
+
+  const row = await env.DB.prepare(
+    "SELECT reporter_id, status FROM reports WHERE id = ?1"
+  ).bind(id).first();
+  if (!row) return bad("該当する通報がありません", 404);
+  if (row.reporter_id !== reporterId) return bad("この通報を編集する権限がありません", 403);
+  if (!UNREVIEWED_STATUSES.has(row.status)) {
+    return bad("すでにレビュー済みの通報は編集できません", 409);
+  }
+
+  // 投稿時点のポイント・review_priority はあえて再計算しない。投稿という行為への
+  // 報酬であり、ラベルの訂正で遡って変える必要はないというシンプルな割り切り。
+  await env.DB.prepare(
+    "UPDATE reports SET finding = ?2, tree_species = ?3, note = ?4 WHERE id = ?1"
+  ).bind(id, finding, species, note).run();
+
+  return Response.json({ ok: true });
+}
+
+async function deleteOwnReport(request, env) {
+  const body = await request.json();
+  const id = String(body.report_id || "");
+  const reporterId = String(body.reporter_id || "");
+  if (!UUID_RE.test(reporterId)) return bad("通報者IDが不正です");
+
+  const row = await env.DB.prepare(
+    "SELECT reporter_id, status, image_key, thumb_key FROM reports WHERE id = ?1"
+  ).bind(id).first();
+  if (!row) return bad("該当する通報がありません", 404);
+  if (row.reporter_id !== reporterId) return bad("この通報を削除する権限がありません", 403);
+  if (!UNREVIEWED_STATUSES.has(row.status)) {
+    return bad("すでにレビュー済みの通報は削除できません", 409);
+  }
+
+  const pointsRow = await env.DB.prepare(
+    "SELECT COALESCE(SUM(points), 0) AS total FROM point_events WHERE report_id = ?1"
+  ).bind(id).first();
+  const delta = pointsRow?.total ?? 0;
+
+  // rule7(作成時はR2→D1)の逆: 削除はD1を先に消す。R2削除が後で失敗しても
+  // 残るのは無害な孤児オブジェクトだけで済む(行だけ残って画像が無い方が壊れる)。
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM point_events WHERE report_id = ?1").bind(id),
+    env.DB.prepare("DELETE FROM reports WHERE id = ?1").bind(id),
+    env.DB.prepare(
+      `UPDATE reporters SET submitted_count = MAX(0, submitted_count - 1),
+                            points_total = MAX(0, points_total - ?2)
+        WHERE id = ?1`
+    ).bind(reporterId, delta),
+  ]);
+
+  await env.PHOTOS.delete(row.image_key);
+  if (row.thumb_key) await env.PHOTOS.delete(row.thumb_key);
+
+  return Response.json({ ok: true });
+}
+
+// =====================================================================
 // Google ログイン(任意)
 //   ゲストの唯一の弱点(端末をまたぐと reporter_id が引き継げない)を
 //   解消するためだけの機能。不正対策・レート制限には一切関与しない
@@ -828,6 +904,14 @@ export default {
       // --- マイページ(reporter_id の一致のみで閲覧可。写真本体は /img/ 側で再検証) ---
       if (path === "/api/mypage" && request.method === "GET") {
         return await mypage(request, env);
+      }
+
+      // --- 通報者本人による削除・軽い修正(未レビューのみ) ---
+      if (path === "/api/reports/edit" && request.method === "POST") {
+        return await editOwnReport(request, env);
+      }
+      if (path === "/api/reports/delete" && request.method === "POST") {
+        return await deleteOwnReport(request, env);
       }
 
       // --- Google ログイン(任意。ゲストと並行して使える) ---

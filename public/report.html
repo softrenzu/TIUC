@@ -43,6 +43,22 @@
   .info-notice button { flex: 1; padding: 9px; font-size: 13px;
                          border: 1px solid var(--line); border-radius: 8px; background: #fff; }
   .info-notice button:disabled { color: var(--muted); }
+
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex;
+                     align-items: center; justify-content: center; padding: 16px; z-index: 10; }
+  .modal-backdrop[hidden] { display: none; }
+  .modal-card { background: #fff; border-radius: 12px; max-width: 380px; width: 100%;
+                position: relative; padding: 20px; text-align: center; }
+  .modal-close { position: absolute; top: 8px; right: 8px; border: none; background: none;
+                 font-size: 22px; cursor: pointer; color: #666; line-height: 1; padding: 4px; }
+  .modal-card .done-title { font-size: 17px; font-weight: 600; margin: 0 0 4px; }
+  .modal-card .done-desc { font-size: 13px; color: var(--muted); margin: 0 0 18px; }
+  .modal-card .done-links { display: flex; flex-direction: column; gap: 8px; }
+  .modal-card .done-links a { display: block; padding: 11px; border: 1px solid var(--line);
+                               border-radius: 8px; text-decoration: none; color: inherit; font-size: 14px; }
+  .modal-card .done-links a:first-child { background: #1a5c3a; border-color: #1a5c3a; color: #fff; }
+  .modal-card .done-links a:hover { background: #f4f4f2; }
+  .modal-card .done-links a:first-child:hover { background: #164a30; }
 </style>
 <body>
 
@@ -115,6 +131,19 @@
 
 <button id="submit" disabled>送信する</button>
 <p class="status" id="submit-status"></p>
+
+<div id="done-modal" class="modal-backdrop" hidden>
+  <div class="modal-card">
+    <button type="button" id="done-close" class="modal-close" aria-label="閉じる">×</button>
+    <p class="done-title">通報しました!</p>
+    <p class="done-desc">ご協力ありがとうございます!</p>
+    <div class="done-links">
+      <a href="map.html">被害マップを見る</a>
+      <a href="mypage.html">マイページを見る</a>
+      <a href="/">トップページへ</a>
+    </div>
+  </div>
+</div>
 
 <script type="module">
 import { meshCodes } from './mesh.js';
@@ -394,10 +423,16 @@ $('submit').addEventListener('click', async () => {
       `<span class="ok">送信しました。ありがとうございます。</span><br>` +
       `受付番号 <span class="mono">${j.id.slice(0, 8)}</span> / ${j.points} ポイント獲得`;
     $('submit').textContent = '送信済み';
+    $('done-modal').hidden = false;
   } catch (e) {
     $('submit-status').innerHTML = `<span class="warn">${e.message}</span>`;
     $('submit').disabled = false;
   }
+});
+
+$('done-close').addEventListener('click', () => { $('done-modal').hidden = true; });
+$('done-modal').addEventListener('click', (e) => {
+  if (e.target === $('done-modal')) $('done-modal').hidden = true;
 });
 </script>
 </body>

@@ -36,7 +36,7 @@
   .warn { color: var(--warn); }
   .mono { font-family: ui-monospace, monospace; }
 
-  #reports .card { cursor: pointer; }
+  #reports .card { cursor: pointer; -webkit-tap-highlight-color: transparent; }
   .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex;
                      align-items: center; justify-content: center; padding: 16px; z-index: 10; }
   .modal-backdrop[hidden] { display: none; }
@@ -50,6 +50,15 @@
                 border-bottom: 1px solid var(--line); gap: 12px; }
   .detail-row:last-child { border-bottom: 0; }
   .detail-row span:first-child { color: var(--muted); flex: none; }
+  .detail-actions { display: flex; gap: 8px; margin-top: 14px; }
+  .detail-actions button { flex: 1; padding: 9px; font-size: 13px; border: 1px solid var(--line);
+                            border-radius: 8px; background: #fff; cursor: pointer; }
+  .detail-actions button.danger { color: var(--warn); border-color: var(--warn); }
+  .detail-edit label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 3px; }
+  .detail-edit select, .detail-edit textarea { width: 100%; font-size: 14px; padding: 7px;
+                                                border: 1px solid var(--line); border-radius: 6px;
+                                                font-family: inherit; }
+  .detail-msg { font-size: 12px; margin-top: 8px; min-height: 1.2em; }
 </style>
 <body>
 
@@ -148,11 +157,16 @@ function renderReports(items) {
 }
 
 // --- 通報詳細(タップで開く。写真は本人限定の /img/ アクセス経路を使う) ------------
+// レビュー前(=まだ人が判定していない)通報だけ、本人による削除・軽い修正を許可する。
+// src/index.js の UNREVIEWED_STATUSES と同じ集合。
+const UNREVIEWED_STATUSES = new Set(['queued', 'auto_rejected', 'pending_review', 'provisional']);
 const LAND_TYPE_LABEL = { public: '公有地', private: '私有地' };
 
-function openDetail(r) {
-  $('detail-img').src = `/img/${r.thumb_key}?reporter_id=${encodeURIComponent(reporterId)}`;
+let currentDetail = null;
+
+function renderDetailView(r) {
   const respLabel = r.response_status ? RESPONSE_LABEL[r.response_status] : null;
+  const editable = UNREVIEWED_STATUSES.has(r.status);
   $('detail-body').innerHTML = `
     <div class="detail-row"><span>発見物</span><span>${FINDING[r.finding] || r.finding}</span></div>
     <div class="detail-row"><span>樹種</span><span>${SPECIES[r.tree_species] || '—'}</span></div>
@@ -162,10 +176,95 @@ function openDetail(r) {
     ${LAND_TYPE_LABEL[r.land_type] ? `<div class="detail-row"><span>土地</span><span>${LAND_TYPE_LABEL[r.land_type]}</span></div>` : ''}
     ${r.note ? `<div class="memo" style="margin-top:8px">${escapeHtml(r.note)}</div>` : ''}
     ${r.response_note ? `<div class="note" style="margin-top:8px">${escapeHtml(r.response_note)}</div>` : ''}
+    ${editable ? `
+      <div class="detail-actions">
+        <button type="button" id="detail-edit-btn">編集する</button>
+        <button type="button" id="detail-delete-btn" class="danger">削除する</button>
+      </div>
+      <p class="detail-msg" id="detail-msg"></p>
+    ` : ''}
   `;
+  if (editable) {
+    $('detail-edit-btn').addEventListener('click', () => renderDetailEdit(r));
+    $('detail-delete-btn').addEventListener('click', () => handleDelete(r));
+  }
+}
+
+function optionsHtml(dict, selected) {
+  return Object.entries(dict).map(([value, label]) =>
+    `<option value="${value}" ${value === selected ? 'selected' : ''}>${label}</option>`
+  ).join('');
+}
+
+function renderDetailEdit(r) {
+  $('detail-body').innerHTML = `
+    <div class="detail-edit">
+      <label for="edit-finding">発見物</label>
+      <select id="edit-finding">${optionsHtml(FINDING, r.finding)}</select>
+      <label for="edit-species">樹種</label>
+      <select id="edit-species">${optionsHtml(SPECIES, r.tree_species)}</select>
+      <label for="edit-note">メモ</label>
+      <textarea id="edit-note" rows="3" maxlength="500">${escapeHtml(r.note || '')}</textarea>
+      <div class="detail-actions">
+        <button type="button" id="edit-cancel">キャンセル</button>
+        <button type="button" id="edit-save">保存する</button>
+      </div>
+      <p class="detail-msg" id="detail-msg"></p>
+    </div>
+  `;
+  $('edit-cancel').addEventListener('click', () => renderDetailView(r));
+  $('edit-save').addEventListener('click', () => handleSave(r));
+}
+
+async function handleSave(r) {
+  const msg = $('detail-msg');
+  msg.textContent = '保存中...';
+  try {
+    const res = await fetch('/api/reports/edit', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        report_id: r.id, reporter_id: reporterId,
+        finding: $('edit-finding').value,
+        tree_species: $('edit-species').value,
+        note: $('edit-note').value,
+      }),
+    });
+    const j = await res.json();
+    if (!j.ok) throw new Error(j.error || '保存に失敗しました');
+    closeDetail();
+    await main();
+  } catch (e) {
+    msg.textContent = e.message;
+    msg.className = 'detail-msg warn';
+  }
+}
+
+async function handleDelete(r) {
+  if (!confirm('この通報を削除しますか?元に戻せません。')) return;
+  const msg = $('detail-msg');
+  msg.textContent = '削除中...';
+  try {
+    const res = await fetch('/api/reports/delete', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ report_id: r.id, reporter_id: reporterId }),
+    });
+    const j = await res.json();
+    if (!j.ok) throw new Error(j.error || '削除に失敗しました');
+    closeDetail();
+    await main();
+  } catch (e) {
+    msg.textContent = e.message;
+    msg.className = 'detail-msg warn';
+  }
+}
+
+function openDetail(r) {
+  currentDetail = r;
+  $('detail-img').src = `/img/${r.thumb_key}?reporter_id=${encodeURIComponent(reporterId)}`;
+  renderDetailView(r);
   $('detail-modal').hidden = false;
 }
-function closeDetail() { $('detail-modal').hidden = true; }
+function closeDetail() { $('detail-modal').hidden = true; currentDetail = null; }
 
 $('reports').addEventListener('click', (e) => {
   const card = e.target.closest('.card[data-id]');

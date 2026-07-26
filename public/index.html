@@ -22,6 +22,9 @@
   .tile.primary { background: #1a5c3a; border-color: #1a5c3a; color: #fff; }
   .tile.primary .tile-desc { color: #cfe3d8; }
   .tile.primary:hover { background: #164a30; }
+  .tile.map-accent { background: #1a4d73; border-color: #1a4d73; color: #fff; }
+  .tile.map-accent .tile-desc { color: #cfe0ea; }
+  .tile.map-accent:hover { background: #163f5e; }
   .tile-bar { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px;
               border: 1px solid var(--line); border-radius: 999px; padding: 10px 18px;
               text-decoration: none; color: var(--muted); font-size: 13px; }
@@ -47,7 +50,7 @@
     <span class="tile-title">通報する</span>
     <span class="tile-desc">写真と場所を送る</span>
   </a>
-  <a class="tile" href="map.html">
+  <a class="tile map-accent" href="map.html">
     <span class="tile-icon">🗺️</span>
     <span class="tile-title">被害マップ</span>
     <span class="tile-desc">状況を地図で見る</span>
