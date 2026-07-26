@@ -59,6 +59,13 @@
   .modal-card .done-links a:first-child { background: #1a5c3a; border-color: #1a5c3a; color: #fff; }
   .modal-card .done-links a:hover { background: #f4f4f2; }
   .modal-card .done-links a:first-child:hover { background: #164a30; }
+
+  .reject-force-btn { display: block; width: 100%; margin-top: 12px; padding: 6px;
+                       font-size: 12px; color: var(--muted); background: none; border: none;
+                       cursor: pointer; text-decoration: underline; }
+  .reject-force-btn:hover { color: #222; }
+  .reject-force-btn:disabled { color: #bbb; cursor: default; text-decoration: none; }
+  .reject-force-msg { font-size: 11px; margin: 6px 0 0; min-height: 1.2em; }
 </style>
 <body>
 
@@ -145,6 +152,19 @@
   </div>
 </div>
 
+<div id="reject-modal" class="modal-backdrop" hidden>
+  <div class="modal-card">
+    <button type="button" id="reject-close" class="modal-close" aria-label="閉じる">×</button>
+    <p class="done-title">写真を確認できませんでした</p>
+    <p class="done-desc" id="reject-message"></p>
+    <div class="done-links">
+      <a href="#" id="reject-retake">撮り直す</a>
+    </div>
+    <button type="button" id="reject-force" class="reject-force-btn">このまま送信する</button>
+    <p class="reject-force-msg" id="reject-force-msg"></p>
+  </div>
+</div>
+
 <script type="module">
 import { meshCodes } from './mesh.js';
 import { parseExif } from './exif.js';
@@ -156,6 +176,7 @@ const authReady = bootstrapAuth().then((r) => { reporterId = r.reporterId; });
 
 const $ = (id) => document.getElementById(id);
 const state = { full: null, thumb: null, exif: null, geo: null, point: null };
+let lastRejected = null; // AI却下(auto_rejected)になった直近の通報。撮り直し/強制送信で使う
 
 // --- 位置情報 ---------------------------------------------------------
 function getPosition() {
@@ -422,8 +443,13 @@ $('submit').addEventListener('click', async () => {
     if (j.status === 'auto_rejected') {
       // AIが「明らかに無関係」と判定 -> 公開はされずポイントも付かない。撮り直しを促し、
       // フォームはそのまま(写真だけ選び直せば)再送信できる状態に戻す。
+      lastRejected = { id: j.id };
       $('submit-status').innerHTML = `<span class="warn">${j.ai_message}</span>`;
       $('submit').disabled = false;
+      $('reject-message').textContent = j.ai_message;
+      $('reject-force-msg').textContent = '';
+      $('reject-force').disabled = false;
+      $('reject-modal').hidden = false;
     } else {
       $('submit-status').innerHTML =
         `<span class="ok">送信しました。ありがとうございます。</span><br>` +
@@ -440,6 +466,61 @@ $('submit').addEventListener('click', async () => {
 $('done-close').addEventListener('click', () => { $('done-modal').hidden = true; });
 $('done-modal').addEventListener('click', (e) => {
   if (e.target === $('done-modal')) $('done-modal').hidden = true;
+});
+
+$('reject-close').addEventListener('click', () => { $('reject-modal').hidden = true; });
+$('reject-modal').addEventListener('click', (e) => {
+  if (e.target === $('reject-modal')) $('reject-modal').hidden = true;
+});
+
+$('reject-retake').addEventListener('click', (e) => {
+  e.preventDefault();
+  const id = lastRejected?.id;
+  $('reject-modal').hidden = true;
+  if (id) {
+    // ベストエフォート。失敗しても撮り直しの妨げにはしない(このままDBに
+    // auto_rejected行が残っても実害はなく、マイページから後でも削除できる)。
+    fetch('/api/reports/delete', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ report_id: id, reporter_id: reporterId }),
+    }).catch(() => {});
+  }
+  lastRejected = null;
+  state.full = null;
+  state.thumb = null;
+  $('file').value = '';
+  $('img-status').textContent = '未選択';
+  $('preview').innerHTML = '';
+  $('submit-status').textContent = '';
+  refresh();
+  $('file').scrollIntoView({ behavior: 'smooth', block: 'center' });
+});
+
+$('reject-force').addEventListener('click', async () => {
+  const id = lastRejected?.id;
+  if (!id) return;
+  $('reject-force').disabled = true;
+  $('reject-force-msg').textContent = '送信中...';
+  try {
+    await authReady;
+    const res = await fetch('/api/reports/force_review', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ report_id: id, reporter_id: reporterId }),
+    });
+    const j = await res.json();
+    if (!j.ok) throw new Error(j.error || '送信に失敗しました');
+    $('reject-modal').hidden = true;
+    $('submit-status').innerHTML =
+      `<span class="ok">送信しました。ありがとうございます。</span><br>` +
+      `受付番号 <span class="mono">${id.slice(0, 8)}</span> / ${j.points} ポイント獲得`;
+    $('submit').textContent = '送信済み';
+    $('submit').disabled = true;
+    $('done-modal').hidden = false;
+    lastRejected = null;
+  } catch (e) {
+    $('reject-force-msg').innerHTML = `<span class="warn">${e.message}</span>`;
+    $('reject-force').disabled = false;
+  }
 });
 </script>
 </body>

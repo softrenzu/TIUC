@@ -118,6 +118,10 @@ function cardHtml(r) {
   if (r.nearby > 0) flags.push(`<span class="tag alert">近隣に${r.nearby}件</span>`);
   if (r.trust_score < 0.4) flags.push('<span class="tag alert">信頼度低</span>');
   if (r.finding === 'adult_alive') flags.push('<span class="tag alert">生きた成虫</span>');
+  // AIは無関係と判定したが、通報者本人が「このまま送信する」で上書きした通報。
+  // (status が auto_rejected のままなら reviewQueue に出てこないので、この条件は
+  //  「上書き済みで審査中」のケースだけを指す)
+  if (r.ai_verdict === 'reject') flags.push('<span class="tag alert">AI却下→本人が送信</span>');
 
   // AI一次判定の情報バッジ(alertではない。card.flagのトグルには影響させない)。
   // provisional は既にAI通過で地図に暫定表示中のため、レビュアーに優先度の目安を伝える。

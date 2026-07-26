@@ -797,6 +797,46 @@ async function deleteOwnReport(request, env) {
   return Response.json({ ok: true });
 }
 
+// AIが「明らかに無関係」と判定した通報を、通報者本人の希望で通常のレビュー待ちに戻す。
+// AIの足切りはあくまで一次判定(rule4)であり、最終的な可否は常に人間が持つべき
+// ——という設計を、実際に誤って弾かれた場合の救済路として具体化したもの。
+// ai_verdict/ai_score/ai_raw はAIが実際に何を判定したかの記録として書き換えない
+// (review.html側でこの上書きを識別するバッジに使う)。
+async function forceReviewReport(request, env) {
+  const body = await request.json();
+  const id = String(body.report_id || "");
+  const reporterId = String(body.reporter_id || "");
+  if (!UUID_RE.test(reporterId)) return bad("通報者IDが不正です");
+
+  const row = await env.DB.prepare(
+    "SELECT reporter_id, status, finding FROM reports WHERE id = ?1"
+  ).bind(id).first();
+  if (!row) return bad("該当する通報がありません", 404);
+  if (row.reporter_id !== reporterId) return bad("この通報を操作する権限がありません", 403);
+  if (row.status !== "auto_rejected") {
+    return bad("この通報はAI却下の状態ではありません", 409);
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const points = row.finding === "none" ? 2 : 1;
+  const kind = row.finding === "none" ? "negative_survey" : "submit";
+
+  await env.DB.batch([
+    env.DB.prepare("UPDATE reports SET status = 'pending_review' WHERE id = ?1").bind(id),
+    env.DB.prepare(
+      `INSERT INTO point_events (reporter_id, report_id, kind, points, created_at)
+       VALUES (?1,?2,?3,?4,?5)`
+    ).bind(reporterId, id, kind, points, now),
+    env.DB.prepare(
+      `UPDATE reporters SET submitted_count = submitted_count + 1,
+                            points_total = points_total + ?2
+        WHERE id = ?1`
+    ).bind(reporterId, points),
+  ]);
+
+  return Response.json({ ok: true, points });
+}
+
 // =====================================================================
 // Google ログイン(任意)
 //   ゲストの唯一の弱点(端末をまたぐと reporter_id が引き継げない)を
@@ -1003,6 +1043,10 @@ export default {
       }
       if (path === "/api/reports/delete" && request.method === "POST") {
         return await deleteOwnReport(request, env);
+      }
+      // --- AI却下(auto_rejected)を本人の希望で通常レビュー待ちに戻す ---
+      if (path === "/api/reports/force_review" && request.method === "POST") {
+        return await forceReviewReport(request, env);
       }
 
       // --- Google ログイン(任意。ゲストと並行して使える) ---
