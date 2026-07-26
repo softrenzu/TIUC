@@ -22,6 +22,20 @@ const SESSION_HOURS = 12;
 const OAUTH_STATE_TTL_SEC = 300;
 const AUTH_SESSION_HOURS = 24 * 30;
 
+// AI 一次判定(足切りのみ。種の同定はさせない)。thumb(512px)を渡す設計は
+// スキーマの thumb_key コメント「AI判定・一覧用」の通り。
+const AI_MODEL = "@cf/meta/llama-3.2-11b-vision-instruct";
+const AI_MAX_TOKENS = 100;
+const AI_TIMEOUT_MS = 15000;
+const TRIAGE_PROMPT = `あなたは市民が投稿した樹木被害通報アプリの写真を一次チェックするアシスタントです。
+虫の種類や被害の有無を判定する必要はありません。以下の3点だけを判定してください。
+1. trunk_visible: 木の幹(樹皮)がはっきり写っているか
+2. debris_like: 木くず状・粉状の排出物や、虫(甲虫)らしきものが写っているか
+3. clearly_irrelevant: 樹木や庭・屋外の風景と明らかに無関係な写真か(人物のセルフィー、書類、室内の無関係な物、動物など)
+
+必ず次のJSON形式のみで回答してください。説明文は書かないでください。
+{"trunk_visible": true/false, "debris_like": true/false, "clearly_irrelevant": true/false}`;
+
 const bad = (error, status = 400) => Response.json({ ok: false, error }, { status });
 
 // =====================================================================
@@ -122,11 +136,64 @@ async function readUserSession(request, env) {
 // =====================================================================
 // 通報の受付
 // =====================================================================
-async function computePriority(env, { reporterId, finding, locConflict, mesh3 }) {
+
+// AI 一次判定。「幹が写っているか」「木くず状のものがあるか」「明らかに無関係か」の
+// 足切りのみ(rule4)。クビアカ固有の判定・種の同定はさせない。
+// 失敗・タイムアウト・パース不能は必ず fail-open(pending_review 相当)にする —
+// AIの不調で有効な通報を機械的に握り潰すことだけは避ける。
+async function classifyReport(env, thumbBuf) {
+  if (!env.AI) return { ok: false, raw: "AI binding not configured" };
+  try {
+    const result = await Promise.race([
+      env.AI.run(AI_MODEL, {
+        image: [...new Uint8Array(thumbBuf)],
+        prompt: TRIAGE_PROMPT,
+        max_tokens: AI_MAX_TOKENS,
+        temperature: 0,
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("AI timeout")), AI_TIMEOUT_MS)),
+    ]);
+    // 生ログはそのまま保存(neuron使用量なども含めて後で精度比較に使えるため)。
+    const raw = JSON.stringify(result ?? null);
+    // response は実機確認上オブジェクトで返るが、文字列で返る場合にも両対応しておく。
+    let parsed = result?.response;
+    if (typeof parsed === "string") {
+      const match = parsed.match(/\{[\s\S]*\}/);
+      if (!match) return { ok: false, raw };
+      parsed = JSON.parse(match[0]);
+    }
+    if (
+      !parsed ||
+      typeof parsed.trunk_visible !== "boolean" ||
+      typeof parsed.debris_like !== "boolean" ||
+      typeof parsed.clearly_irrelevant !== "boolean"
+    ) {
+      return { ok: false, raw };
+    }
+    return { ok: true, ...parsed, raw };
+  } catch (e) {
+    return { ok: false, raw: String(e) };
+  }
+}
+
+function resolveAiStatus(result) {
+  if (!result.ok) return { status: "pending_review", verdict: null, score: null };
+  if (result.clearly_irrelevant) return { status: "auto_rejected", verdict: "reject", score: 0 };
+  if (result.trunk_visible || result.debris_like) {
+    return {
+      status: "provisional", verdict: "pass",
+      score: result.trunk_visible && result.debris_like ? 1 : 0.7,
+    };
+  }
+  return { status: "pending_review", verdict: "review", score: 0.4 };
+}
+
+async function computePriority(env, { reporterId, finding, locConflict, mesh3, aiScore }) {
   let p = 100;
   if (finding === "none") p += 60;
   if (finding === "frass" || finding === "adult_alive") p -= 20;
   if (locConflict) p -= 30;
+  if (aiScore === 1) p -= 15; // AIが幹・木くず両方を検出 → 実被害の可能性が高く優先
 
   const row = await env.DB.prepare(
     `SELECT
@@ -192,19 +259,29 @@ async function createReport(request, env) {
   const imageKey = `${prefix}/full.jpg`;
   const thumbKey = `${prefix}/thumb.jpg`;
 
-  await env.PHOTOS.put(imageKey, full.stream(), { httpMetadata: { contentType: "image/jpeg" } });
-  await env.PHOTOS.put(thumbKey, thumb.stream(), { httpMetadata: { contentType: "image/jpeg" } });
+  const thumbBuf = await thumb.arrayBuffer();
+  const [, , aiResult] = await Promise.all([
+    env.PHOTOS.put(imageKey, full.stream(), { httpMetadata: { contentType: "image/jpeg" } }),
+    env.PHOTOS.put(thumbKey, thumbBuf, { httpMetadata: { contentType: "image/jpeg" } }),
+    classifyReport(env, thumbBuf),
+  ]);
+  const ai = resolveAiStatus(aiResult);
 
-  const priority = await computePriority(env, { reporterId, finding, locConflict, mesh3: mesh.mesh3 });
+  const priority = await computePriority(env, {
+    reporterId, finding, locConflict, mesh3: mesh.mesh3, aiScore: ai.score,
+  });
   const clientHash = await sha256Short(
     `${env.HASH_SALT || "dev"}:${request.headers.get("cf-connecting-ip") || ""}:${
       request.headers.get("user-agent") || ""}`
   );
 
-  const points = finding === "none" ? 2 : 1;
+  // auto_rejected(AIが明確に無関係と判定)には投稿時ポイントを一切与えない。
+  // 「幹すら写っていない」レベルの投稿は rule3 の「投稿という行為への小さな報酬」の
+  // 対象ではない、というシンプルな割り切り。
+  const points = ai.status === "auto_rejected" ? 0 : (finding === "none" ? 2 : 1);
   const kind = finding === "none" ? "negative_survey" : "submit";
 
-  await env.DB.batch([
+  const stmts = [
     env.DB.prepare(
       "INSERT INTO reporters (id, created_at) VALUES (?1, ?2) ON CONFLICT(id) DO NOTHING"
     ).bind(reporterId, now),
@@ -214,27 +291,40 @@ async function createReport(request, env) {
          loc_source, loc_accuracy_m, loc_conflict,
          mesh3, mesh4, mesh5, finding, tree_species, note,
          image_key, thumb_key, image_bytes,
-         status, review_priority, turnstile_ok, client_hash
+         status, review_priority, turnstile_ok, client_hash,
+         ai_verdict, ai_score, ai_model, ai_raw, ai_at
        ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,
-                 'pending_review',?19,0,?20)`
+                 ?19,?20,0,?21,?22,?23,?24,?25,?26)`
     ).bind(
       id, reporterId, now, observedAt, lat, lng,
       locSource, accuracy, locConflict,
       mesh.mesh3, mesh.mesh4, mesh.mesh5, finding, species, note,
-      imageKey, thumbKey, full.size, priority, clientHash
+      imageKey, thumbKey, full.size,
+      ai.status, priority, clientHash,
+      ai.verdict, ai.score, AI_MODEL, aiResult.raw ?? null, now
     ),
-    env.DB.prepare(
-      `INSERT INTO point_events (reporter_id, report_id, kind, points, created_at)
-       VALUES (?1,?2,?3,?4,?5)`
-    ).bind(reporterId, id, kind, points, now),
-    env.DB.prepare(
-      `UPDATE reporters SET submitted_count = submitted_count + 1,
-                            points_total = points_total + ?2
-        WHERE id = ?1`
-    ).bind(reporterId, points),
-  ]);
+  ];
+  if (ai.status !== "auto_rejected") {
+    stmts.push(
+      env.DB.prepare(
+        `INSERT INTO point_events (reporter_id, report_id, kind, points, created_at)
+         VALUES (?1,?2,?3,?4,?5)`
+      ).bind(reporterId, id, kind, points, now),
+      env.DB.prepare(
+        `UPDATE reporters SET submitted_count = submitted_count + 1,
+                              points_total = points_total + ?2
+          WHERE id = ?1`
+      ).bind(reporterId, points),
+    );
+  }
+  await env.DB.batch(stmts);
 
-  return Response.json({ ok: true, id, mesh3: mesh.mesh3, mesh4: mesh.mesh4, points });
+  return Response.json({
+    ok: true, id, mesh3: mesh.mesh3, mesh4: mesh.mesh4, points, status: ai.status,
+    ai_message: ai.status === "auto_rejected"
+      ? "写真から幹や樹木の様子が確認できませんでした。木の幹全体が写るように撮り直して、もう一度お試しください。"
+      : null,
+  });
 }
 
 // =====================================================================
@@ -248,6 +338,7 @@ async function reviewQueue(request, env, reviewer) {
     `SELECT r.id, r.created_at, r.observed_at, r.finding, r.tree_species, r.note,
             r.lat, r.lng, r.mesh4, r.mesh5, r.loc_source, r.loc_accuracy_m, r.loc_conflict,
             r.thumb_key, r.image_key, r.review_priority, r.status,
+            r.ai_verdict, r.ai_score,
             rp.trust_score, rp.submitted_count, rp.confirmed_count, rp.rejected_count,
             (SELECT COUNT(*) FROM reports x
               WHERE x.mesh5 = r.mesh5 AND x.id <> r.id

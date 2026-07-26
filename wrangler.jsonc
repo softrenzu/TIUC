@@ -17,5 +17,8 @@
       "binding": "PHOTOS",
       "bucket_name": "kubiaka-photos"
     }
-  ]
+  ],
+  "ai": {
+    "binding": "AI"
+  }
 }

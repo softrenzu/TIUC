@@ -57,10 +57,13 @@
    - 「見たが異常なし」も正式なデータ(不在データ)。ただし写真は必須(机上でのポイント稼ぎ防止)。
    - `trust_score` は確定率のラプラス平滑化。レビュー優先度と表示順に反映。
 
-4. **AI 判定(未実装)は種の同定をさせない。**
+4. **AI 判定は種の同定をさせない。**
    「幹が写っているか」「木くず状のものがあるか」「明らかに無関係か」の足切りのみ。
-   クビアカ固有の判定は人間(レビュー画面)が行う。AI 導入時も人間レビューを残し、精度を実測する。
-    AI は Workers AI を予定。無料枠(1日1万ニューロン)では vision で1日数百件が上限の見込み。
+   クビアカ固有の判定は人間(レビュー画面)が行う。人間レビューは残しており、`ai_verdict`/
+   `ai_raw`(neuron使用量込みの生ログ)を`reports`に保存して精度を実測できるようにしてある。
+   Workers AI(`@cf/meta/llama-3.2-11b-vision-instruct`)を通報受付と同期的に呼び出す。
+   実測コストは1件あたり約9〜10neuronで、無料枠(1日1万ニューロン)でも十分な余裕がある
+   (当初「vision で1日数百件が上限」と見積もっていたより実際はかなり軽い)。
 
 5. **コメント機能は自治体からの一方向のみ**(`response_note`)。
    住民間の自由コメントは「〇〇さんの家が放置」型の書き込みを生むため実装しない。
@@ -85,7 +88,9 @@
 
 reports.status: queued / auto_rejected / pending_review / provisional /
                 confirmed / rejected / duplicate
-  ※現状、新規通報は pending_review で入る(AI 未実装のため)。AI 導入時に queued 始まりへ戻す。
+  ※AI一次判定は通報受付と同じリクエスト内で同期的に完結するため(`queued`は永続化されず、
+    判定結果の`auto_rejected`/`provisional`/`pending_review`のいずれかで直接INSERTされる)、
+    DB上に`queued`状態の行が存在することは実質無い。
 reports.land_type: public / private / unknown(レビュー時に自治体が入力)
 reports.response_status: null / scheduled / treating / done(現地の対応状況。status とは別概念)
 
@@ -118,8 +123,15 @@ Cookie名`uid`・秘密鍵`env.AUTH_SECRET`はレビュアー用の`rv`/`REVIEW_
       `POST /api/reports/edit`)が可能。削除時はポイント台帳も遡って取り消し、R2画像も削除) /
       通報フォーム送信後の完了ポップアップ(マップ/マイページ/トップへの導線) /
       ランディングページ(`/`、通報・マップをスクエアの主要導線(緑・青)、マイページは
-      控えめな横長導線の2カラムUI) / 通報者向けGoogleログイン(任意、ゲスト併存)。
-未着手: AI一次判定(設計プラン確定・実装は指示待ち) / チーム機能 / Cloudflare Access 移行 / 独自ドメイン。
+      控えめな横長導線の2カラムUI) / 通報者向けGoogleログイン(任意、ゲスト併存) /
+      AI一次判定(Workers AI、`@cf/meta/llama-3.2-11b-vision-instruct`、通報の`thumb`に対して
+      「幹が写っているか」「木くず状のものがあるか」「明らかに無関係か」の3項目のみをJSONで
+      判定。種の同定はさせない。`clearly_irrelevant`なら`auto_rejected`(ポイント不付与)、
+      幹か木くずのどちらか検出なら`provisional`(地図に暫定表示、人の確認待ち)、それ以外は
+      `pending_review`。AI呼び出しの失敗・タイムアウト(15秒)・パース不能はすべて
+      `pending_review`にfail-open。実測コストは1件あたり約9〜10neuron(無料枠1万/日で
+      余裕をもって数百〜千件程度))。
+未着手: チーム機能 / Cloudflare Access 移行 / 独自ドメイン。
 
 ※ 未調査エリア表示は `survey_mesh`(自治体の調査対象データ)未整備のため、「bboxを現在のズーム粒度
   (mesh3/4/5)のグリッドで理論上列挙し、通報が1件も無いセル」を暫定的な代用指標として使っている

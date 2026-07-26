@@ -419,11 +419,18 @@ $('submit').addEventListener('click', async () => {
     const res = await fetch('/api/reports', { method: 'POST', body: fd });
     const j = await res.json();
     if (!j.ok) throw new Error(j.error || '送信に失敗しました');
-    $('submit-status').innerHTML =
-      `<span class="ok">送信しました。ありがとうございます。</span><br>` +
-      `受付番号 <span class="mono">${j.id.slice(0, 8)}</span> / ${j.points} ポイント獲得`;
-    $('submit').textContent = '送信済み';
-    $('done-modal').hidden = false;
+    if (j.status === 'auto_rejected') {
+      // AIが「明らかに無関係」と判定 -> 公開はされずポイントも付かない。撮り直しを促し、
+      // フォームはそのまま(写真だけ選び直せば)再送信できる状態に戻す。
+      $('submit-status').innerHTML = `<span class="warn">${j.ai_message}</span>`;
+      $('submit').disabled = false;
+    } else {
+      $('submit-status').innerHTML =
+        `<span class="ok">送信しました。ありがとうございます。</span><br>` +
+        `受付番号 <span class="mono">${j.id.slice(0, 8)}</span> / ${j.points} ポイント獲得`;
+      $('submit').textContent = '送信済み';
+      $('done-modal').hidden = false;
+    }
   } catch (e) {
     $('submit-status').innerHTML = `<span class="warn">${e.message}</span>`;
     $('submit').disabled = false;
