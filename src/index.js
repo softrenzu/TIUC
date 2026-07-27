@@ -329,17 +329,17 @@ async function createReport(request, env) {
       ).bind(reporterId, points),
       // キャラ育成ゲームのXP(point_events/points_totalとは別経済。rule3参照)。
       // 通報は一意なイベントで二重送信の衝突を気にする必要がないため、
-      // triageVote のような changes() チェーンは不要。
+      // triageVote のような changes() チェーンは不要。xp_total は相対更新のみ行い、
+      // レベル(非線形カーブ)は batch 後に JS 側でまとめて計算する。
       env.DB.prepare(
         `INSERT INTO xp_events (reporter_id, report_id, kind, amount, created_at)
          VALUES (?1,?2,'report_submit',?3,?4)`
       ).bind(reporterId, id, XP_PER_REPORT, now),
       env.DB.prepare(
         `INSERT INTO characters (reporter_id, xp_total, level, created_at, updated_at)
-         VALUES (?1,?2,CAST(1 + ?2 / 20 AS INTEGER),?3,?3)
+         VALUES (?1,?2,1,?3,?3)
          ON CONFLICT (reporter_id) DO UPDATE SET
            xp_total = characters.xp_total + ?2,
-           level = CAST(1 + (characters.xp_total + ?2) / 20 AS INTEGER),
            updated_at = ?3`
       ).bind(reporterId, XP_PER_REPORT, now),
     );
@@ -349,9 +349,11 @@ async function createReport(request, env) {
   let character = null;
   if (ai.status !== "auto_rejected") {
     const char = await env.DB.prepare(
-      "SELECT xp_total, level FROM characters WHERE reporter_id = ?1"
+      "SELECT xp_total FROM characters WHERE reporter_id = ?1"
     ).bind(reporterId).first();
-    if (char) character = { xp_total: char.xp_total, level: char.level, xp_gained: XP_PER_REPORT };
+    const after = characterProgress(char?.xp_total ?? XP_PER_REPORT);
+    const before = characterProgress(after.xp_total - XP_PER_REPORT);
+    character = { ...after, xp_gained: XP_PER_REPORT, leveled_up: after.level > before.level };
   }
 
   return Response.json({
@@ -877,18 +879,19 @@ async function forceReviewReport(request, env) {
     ).bind(reporterId, id, XP_PER_REPORT, now),
     env.DB.prepare(
       `INSERT INTO characters (reporter_id, xp_total, level, created_at, updated_at)
-       VALUES (?1,?2,CAST(1 + ?2 / 20 AS INTEGER),?3,?3)
+       VALUES (?1,?2,1,?3,?3)
        ON CONFLICT (reporter_id) DO UPDATE SET
          xp_total = characters.xp_total + ?2,
-         level = CAST(1 + (characters.xp_total + ?2) / 20 AS INTEGER),
          updated_at = ?3`
     ).bind(reporterId, XP_PER_REPORT, now),
   ]);
 
   const char = await env.DB.prepare(
-    "SELECT xp_total, level FROM characters WHERE reporter_id = ?1"
+    "SELECT xp_total FROM characters WHERE reporter_id = ?1"
   ).bind(reporterId).first();
-  const character = char ? { xp_total: char.xp_total, level: char.level, xp_gained: XP_PER_REPORT } : null;
+  const after = characterProgress(char?.xp_total ?? XP_PER_REPORT);
+  const before = characterProgress(after.xp_total - XP_PER_REPORT);
+  const character = { ...after, xp_gained: XP_PER_REPORT, leveled_up: after.level > before.level };
 
   return Response.json({ ok: true, points, character });
 }
@@ -899,8 +902,31 @@ async function forceReviewReport(request, env) {
 //   投票者に見せるのはサムネイルのみで、位置情報・メモ・通報者情報は一切渡さない
 //   (rule1は変えない。最終判定権限は今まで通りレビュアーのみ)。
 // =====================================================================
-function xpToLevel(xp) {
-  return 1 + Math.floor(xp / 20);
+// レベルカーブ: 序盤(〜Lv8)は1レベル2〜3XPで速く、Lv8〜10で4〜5XPとやや重くなり、
+// 以降も3レベルごとに+1XPずつ緩やかに難度が上がり続ける(天井を作らず長期的な継続動機にする)。
+// Lv8=累積19XP(約10コミット)・Lv10=累積27XP(約14コミット)を狙って調整した値。
+// characters.level 列は参考値としてのみ書き込み、表示・判定には常にここで xp_total から
+// 再計算した値を使う(reporters.points_total のような「集計キャッシュ」の位置づけ)。
+function xpCostForLevel(level) {
+  return 2 + Math.floor((level - 1) / 3);
+}
+function xpForLevel(level) {
+  let xp = 0;
+  for (let l = 1; l < level; l++) xp += xpCostForLevel(l);
+  return xp;
+}
+function xpToLevel(xpTotal) {
+  let level = 1;
+  while (xpForLevel(level + 1) <= xpTotal) level++;
+  return level;
+}
+function characterProgress(xpTotal) {
+  const level = xpToLevel(xpTotal);
+  return {
+    level, xp_total: xpTotal,
+    xp_into_level: xpTotal - xpForLevel(level),
+    xp_for_next_level: xpForLevel(level + 1) - xpForLevel(level),
+  };
 }
 
 async function getCharacter(request, env) {
@@ -909,17 +935,10 @@ async function getCharacter(request, env) {
   if (!UUID_RE.test(reporterId)) return bad("通報者IDが不正です");
 
   const row = await env.DB.prepare(
-    "SELECT xp_total, level FROM characters WHERE reporter_id = ?1"
+    "SELECT xp_total FROM characters WHERE reporter_id = ?1"
   ).bind(reporterId).first();
 
-  const xpTotal = row?.xp_total ?? 0;
-  return Response.json({
-    ok: true,
-    level: row?.level ?? xpToLevel(xpTotal),
-    xp_total: xpTotal,
-    xp_into_level: xpTotal % 20,
-    xp_for_next_level: 20,
-  });
+  return Response.json({ ok: true, ...characterProgress(row?.xp_total ?? 0) });
 }
 
 async function triageNext(request, env) {
@@ -1005,27 +1024,26 @@ async function triageVote(request, env) {
         WHERE changes() = 1`
     ).bind(voterId, reportId, XP_PER_VOTE, now),
     env.DB.prepare(
-      // D1 が渡す束縛値の型次第で ?2/20 が REAL 除算になりうる(整数同士でも)。
-      // STRICT テーブルの INTEGER 列は端数のある REAL を拒否するため CAST で明示的に整数化する。
+      // レベル(非線形カーブ)はSQLでは計算せず、batch後にJS側でまとめて計算する
+      // (characters.level は参考値としてのみ書き込む「集計キャッシュ」)。
       `INSERT INTO characters (reporter_id, xp_total, level, created_at, updated_at)
-       SELECT ?1, ?2, CAST(1 + ?2 / 20 AS INTEGER), ?3, ?3
+       SELECT ?1, ?2, 1, ?3, ?3
         WHERE changes() = 1
        ON CONFLICT (reporter_id) DO UPDATE SET
          xp_total = characters.xp_total + ?2,
-         level = CAST(1 + (characters.xp_total + ?2) / 20 AS INTEGER),
          updated_at = ?3`
     ).bind(voterId, XP_PER_VOTE, now),
   ]);
   const awarded = results[1].meta.changes > 0;
 
   const char = await env.DB.prepare(
-    "SELECT xp_total, level FROM characters WHERE reporter_id = ?1"
+    "SELECT xp_total FROM characters WHERE reporter_id = ?1"
   ).bind(voterId).first();
+  const after = characterProgress(char?.xp_total ?? 0);
+  const before = awarded ? characterProgress(after.xp_total - XP_PER_VOTE) : after;
 
   return Response.json({
-    ok: true, awarded,
-    level: char?.level ?? 1,
-    xp_total: char?.xp_total ?? 0,
+    ok: true, awarded, leveled_up: awarded && after.level > before.level, ...after,
   });
 }
 

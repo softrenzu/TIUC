@@ -178,6 +178,14 @@ const $ = (id) => document.getElementById(id);
 const state = { full: null, thumb: null, exif: null, geo: null, point: null };
 let lastRejected = null; // AI却下(auto_rejected)になった直近の通報。撮り直し/強制送信で使う
 
+function doneDescText(character) {
+  if (!character) return 'ご協力ありがとうございます!';
+  if (character.leveled_up) {
+    return `🎉 レベルアップ!ヨソモンが Lv.${character.level} になりました(+${character.xp_gained} XP)`;
+  }
+  return `ご協力ありがとうございます!ヨソモンが育ちました(+${character.xp_gained} XP, Lv.${character.level})`;
+}
+
 // --- 位置情報 ---------------------------------------------------------
 function getPosition() {
   return new Promise((res, rej) => {
@@ -455,9 +463,7 @@ $('submit').addEventListener('click', async () => {
         `<span class="ok">送信しました。ありがとうございます。</span><br>` +
         `受付番号 <span class="mono">${j.id.slice(0, 8)}</span> / ${j.points} ポイント獲得` +
         (j.character ? ` / ヨソモン +${j.character.xp_gained} XP` : '');
-      $('done-desc').textContent = j.character
-        ? `ご協力ありがとうございます!ヨソモンが育ちました(+${j.character.xp_gained} XP, Lv.${j.character.level})`
-        : 'ご協力ありがとうございます!';
+      $('done-desc').textContent = doneDescText(j.character);
       $('submit').textContent = '送信済み';
       $('done-modal').hidden = false;
     }
@@ -521,9 +527,7 @@ $('reject-force').addEventListener('click', async () => {
       `<span class="ok">送信しました。ありがとうございます。</span><br>` +
       `受付番号 <span class="mono">${id.slice(0, 8)}</span> / ${j.points} ポイント獲得` +
       (j.character ? ` / ヨソモン +${j.character.xp_gained} XP` : '');
-    $('done-desc').textContent = j.character
-      ? `ご協力ありがとうございます!ヨソモンが育ちました(+${j.character.xp_gained} XP, Lv.${j.character.level})`
-      : 'ご協力ありがとうございます!';
+    $('done-desc').textContent = doneDescText(j.character);
     $('submit').textContent = '送信済み';
     $('submit').disabled = true;
     $('done-modal').hidden = false;
