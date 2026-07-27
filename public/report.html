@@ -143,11 +143,11 @@
   <div class="modal-card">
     <button type="button" id="done-close" class="modal-close" aria-label="閉じる">×</button>
     <p class="done-title">通報しました!</p>
-    <p class="done-desc">ご協力ありがとうございます!</p>
+    <p class="done-desc" id="done-desc">ご協力ありがとうございます!</p>
     <div class="done-links">
+      <a href="/">ヨソモンを見る</a>
       <a href="map.html">被害マップを見る</a>
       <a href="mypage.html">マイページを見る</a>
-      <a href="/">トップページへ</a>
     </div>
   </div>
 </div>
@@ -453,7 +453,11 @@ $('submit').addEventListener('click', async () => {
     } else {
       $('submit-status').innerHTML =
         `<span class="ok">送信しました。ありがとうございます。</span><br>` +
-        `受付番号 <span class="mono">${j.id.slice(0, 8)}</span> / ${j.points} ポイント獲得`;
+        `受付番号 <span class="mono">${j.id.slice(0, 8)}</span> / ${j.points} ポイント獲得` +
+        (j.character ? ` / ヨソモン +${j.character.xp_gained} XP` : '');
+      $('done-desc').textContent = j.character
+        ? `ご協力ありがとうございます!ヨソモンが育ちました(+${j.character.xp_gained} XP, Lv.${j.character.level})`
+        : 'ご協力ありがとうございます!';
       $('submit').textContent = '送信済み';
       $('done-modal').hidden = false;
     }
@@ -515,7 +519,11 @@ $('reject-force').addEventListener('click', async () => {
     $('reject-modal').hidden = true;
     $('submit-status').innerHTML =
       `<span class="ok">送信しました。ありがとうございます。</span><br>` +
-      `受付番号 <span class="mono">${id.slice(0, 8)}</span> / ${j.points} ポイント獲得`;
+      `受付番号 <span class="mono">${id.slice(0, 8)}</span> / ${j.points} ポイント獲得` +
+      (j.character ? ` / ヨソモン +${j.character.xp_gained} XP` : '');
+    $('done-desc').textContent = j.character
+      ? `ご協力ありがとうございます!ヨソモンが育ちました(+${j.character.xp_gained} XP, Lv.${j.character.level})`
+      : 'ご協力ありがとうございます!';
     $('submit').textContent = '送信済み';
     $('submit').disabled = true;
     $('done-modal').hidden = false;

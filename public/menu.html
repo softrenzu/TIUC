@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ja">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>クビアカツヤカミキリ 通報アプリ</title>
+<style>
+  :root { --line:#ddd; --muted:#666; --warn:#a33; --ok:#161; }
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, sans-serif; margin: 0 auto; padding: 16px;
+         max-width: 520px; line-height: 1.6; color: #222; }
+  .back { display: block; font-size: 12px; color: var(--muted); text-decoration: none; margin: 0 0 12px; }
+  h1 { font-size: 20px; margin: 0 0 8px; }
+  .lead { color: var(--muted); font-size: 14px; margin: 0 0 24px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .tile { grid-column: span 1; aspect-ratio: 1 / 1; display: flex; flex-direction: column;
+          align-items: center; justify-content: center; gap: 6px; text-align: center;
+          border: 1px solid var(--line); border-radius: 16px; text-decoration: none;
+          color: inherit; padding: 12px; }
+  .tile:hover { border-color: #333; background: #f4f4f2; }
+  .tile .tile-icon { font-size: 34px; line-height: 1; }
+  .tile .tile-title { font-size: 15px; font-weight: 600; }
+  .tile .tile-desc { font-size: 11px; color: var(--muted); }
+  .tile.primary { background: #1a5c3a; border-color: #1a5c3a; color: #fff; }
+  .tile.primary .tile-desc { color: #cfe3d8; }
+  .tile.primary:hover { background: #164a30; }
+  .tile.map-accent { background: #1a4d73; border-color: #1a4d73; color: #fff; }
+  .tile.map-accent .tile-desc { color: #cfe0ea; }
+  .tile.map-accent:hover { background: #163f5e; }
+  .tile-bar { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px;
+              border: 1px solid var(--line); border-radius: 999px; padding: 10px 18px;
+              text-decoration: none; color: var(--muted); font-size: 13px; }
+  .tile-bar:hover { border-color: #333; background: #f4f4f2; }
+  .tile-bar .tile-bar-icon { font-size: 15px; }
+  footer { margin-top: 28px; font-size: 12px; color: var(--muted); }
+  .stats { font-size: 13px; color: var(--muted); margin: -12px 0 20px; }
+  .stats strong { color: #222; font-size: 15px; }
+</style>
+<body>
+
+<a class="back" href="/">← ヨソモンに戻る</a>
+<h1>クビアカツヤカミキリ 通報アプリ</h1>
+<p class="lead">
+  サクラ・ウメ・モモなどバラ科樹木の害虫「クビアカツヤカミキリ」の被害を、
+  スマホで撮影して通報できます。集まった情報は地図で公開され、行政の防除につながります。
+</p>
+
+<p class="stats" id="stats" hidden></p>
+
+<div class="grid">
+  <a class="tile primary" href="report.html">
+    <span class="tile-icon">📷</span>
+    <span class="tile-title">通報する</span>
+    <span class="tile-desc">写真と場所を送る</span>
+  </a>
+  <a class="tile map-accent" href="map.html">
+    <span class="tile-icon">🗺️</span>
+    <span class="tile-title">被害マップ</span>
+    <span class="tile-desc">状況を地図で見る</span>
+  </a>
+  <a class="tile-bar" href="mypage.html">
+    <span class="tile-bar-icon">👤</span>
+    <span>マイページ(通報履歴・ポイント)</span>
+  </a>
+</div>
+
+<footer>ログイン不要・匿名で利用できます。</footer>
+
+<script type="module">
+fetch('/api/health').then((r) => r.json()).then((j) => {
+  if (!j.ok) return;
+  const el = document.getElementById('stats');
+  el.innerHTML = `これまでに <strong>${j.total}</strong> 件の通報が届いています` +
+    (j.confirmed ? `(うち被害確定 <strong>${j.confirmed}</strong> 件)` : '') + '。';
+  el.hidden = false;
+}).catch(() => {}); // 取得に失敗してもページ自体は問題なく表示する
+</script>
+
+</body>
+</html>

@@ -2,81 +2,231 @@
 <html lang="ja">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>クビアカツヤカミキリ 通報アプリ</title>
+<title>ヨソモン(β)</title>
 <style>
   :root { --line:#ddd; --muted:#666; --warn:#a33; --ok:#161; }
   * { box-sizing: border-box; }
-  body { font-family: system-ui, -apple-system, sans-serif; margin: 0 auto; padding: 16px;
-         max-width: 520px; line-height: 1.6; color: #222; }
-  h1 { font-size: 20px; margin: 0 0 8px; }
-  .lead { color: var(--muted); font-size: 14px; margin: 0 0 24px; }
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .tile { grid-column: span 1; aspect-ratio: 1 / 1; display: flex; flex-direction: column;
-          align-items: center; justify-content: center; gap: 6px; text-align: center;
-          border: 1px solid var(--line); border-radius: 16px; text-decoration: none;
-          color: inherit; padding: 12px; }
-  .tile:hover { border-color: #333; background: #f4f4f2; }
-  .tile .tile-icon { font-size: 34px; line-height: 1; }
-  .tile .tile-title { font-size: 15px; font-weight: 600; }
-  .tile .tile-desc { font-size: 11px; color: var(--muted); }
-  .tile.primary { background: #1a5c3a; border-color: #1a5c3a; color: #fff; }
-  .tile.primary .tile-desc { color: #cfe3d8; }
-  .tile.primary:hover { background: #164a30; }
-  .tile.map-accent { background: #1a4d73; border-color: #1a4d73; color: #fff; }
-  .tile.map-accent .tile-desc { color: #cfe0ea; }
-  .tile.map-accent:hover { background: #163f5e; }
-  .tile-bar { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px;
-              border: 1px solid var(--line); border-radius: 999px; padding: 10px 18px;
-              text-decoration: none; color: var(--muted); font-size: 13px; }
-  .tile-bar:hover { border-color: #333; background: #f4f4f2; }
-  .tile-bar .tile-bar-icon { font-size: 15px; }
-  .game-link { display: block; margin-top: 10px; font-size: 12px; color: var(--muted);
-               text-align: center; text-decoration: none; }
-  .game-link:hover { color: #222; }
-  footer { margin-top: 28px; font-size: 12px; color: var(--muted); }
-  .stats { font-size: 13px; color: var(--muted); margin: -12px 0 20px; }
-  .stats strong { color: #222; font-size: 15px; }
+  html, body { margin: 0; height: 100%; }
+  body { font-family: system-ui, -apple-system, sans-serif; color: #222;
+         display: flex; flex-direction: column; }
+
+  #topbar { display: flex; align-items: center; gap: 8px; padding: 10px 16px;
+            border-bottom: 1px solid var(--line); flex: none; }
+  #topbar .menu-link { font-size: 12px; color: var(--muted); text-decoration: none; flex: none; }
+  #topbar h1 { font-size: 16px; margin: 0; flex: 1; text-align: center; }
+  #topbar h1 .beta { font-size: 11px; color: var(--muted); font-weight: 400;
+                      border: 1px solid var(--line); border-radius: 999px; padding: 1px 6px; }
+  #login-link { font-size: 12px; color: #1a4d73; text-decoration: none; flex: none; }
+
+  #char-area { flex: none; min-height: 38vh; display: flex; flex-direction: column;
+               align-items: center; justify-content: center; gap: 8px;
+               background: linear-gradient(180deg, #eef5f0, #fff); padding: 16px; }
+  #char-sprite { font-size: 88px; line-height: 1; }
+  #char-level { font-size: 18px; font-weight: 700; }
+  .xp-bar { width: 220px; height: 10px; border-radius: 999px; background: #e3e3df;
+            overflow: hidden; }
+  .xp-bar-fill { height: 100%; background: #1a5c3a; border-radius: 999px;
+                 transition: width .3s ease; }
+  #xp-label { font-size: 12px; color: var(--muted); }
+
+  #action-wrap { flex: none; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+  .action-btn { display: block; width: 100%; padding: 14px; font-size: 16px; font-weight: 700;
+                color: #fff; border: 0; border-radius: 999px; cursor: pointer;
+                text-decoration: none; text-align: center; }
+  .action-btn.primary { background: #1a5c3a; }
+  .action-btn.primary:active { background: #164a30; }
+  .action-btn.secondary { background: #1a4d73; }
+  .action-btn.secondary:active { background: #163f5e; }
+  #action-desc { font-size: 12px; color: var(--muted); margin: 4px 0 0; text-align: center; }
+
+  #triage-area { flex: 1; display: flex; flex-direction: column; align-items: center;
+                 justify-content: center; padding: 16px; gap: 12px; position: relative; }
+  #triage-area[hidden] { display: none; }
+  #triage-status { font-size: 14px; color: var(--muted); text-align: center; }
+  #triage-card { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 10px; }
+  #triage-card[hidden] { display: none; }
+  #triage-img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 12px;
+                background: #eee; display: block; }
+  .triage-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .triage-buttons button { padding: 14px 8px; font-size: 14px; border: 1px solid var(--line);
+                            border-radius: 10px; background: #fff; cursor: pointer; }
+  .triage-buttons button:disabled { color: #bbb; cursor: default; }
+  .triage-buttons button.skip { grid-column: 1 / -1; color: var(--muted); background: none;
+                                 border-style: dashed; }
+  #triage-close { color: var(--muted); background: none; border: none; text-decoration: underline;
+                  padding: 6px; font-size: 13px; cursor: pointer; }
+
+  .xp-toast { position: absolute; top: 8px; left: 50%; transform: translate(-50%, -8px);
+              font-size: 15px; font-weight: 700; color: #1a5c3a; background: #eef5f0;
+              border: 1px solid #cfe3d8; border-radius: 999px; padding: 6px 16px;
+              opacity: 0; transition: opacity .2s ease, transform .2s ease; pointer-events: none; }
+  .xp-toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  footer { flex: none; padding: 12px 16px; }
+  footer .note { font-size: 11px; color: var(--muted); margin: 0 0 8px; text-align: center; }
+  footer .menu-link { display: block; text-align: center; font-size: 12px; color: var(--muted);
+                       text-decoration: none; }
+  footer .menu-link:hover { color: #222; }
 </style>
 <body>
 
-<h1>クビアカツヤカミキリ 通報アプリ</h1>
-<p class="lead">
-  サクラ・ウメ・モモなどバラ科樹木の害虫「クビアカツヤカミキリ」の被害を、
-  スマホで撮影して通報できます。集まった情報は地図で公開され、行政の防除につながります。
-</p>
-
-<p class="stats" id="stats" hidden></p>
-
-<div class="grid">
-  <a class="tile primary" href="report.html">
-    <span class="tile-icon">📷</span>
-    <span class="tile-title">通報する</span>
-    <span class="tile-desc">写真と場所を送る</span>
-  </a>
-  <a class="tile map-accent" href="map.html">
-    <span class="tile-icon">🗺️</span>
-    <span class="tile-title">被害マップ</span>
-    <span class="tile-desc">状況を地図で見る</span>
-  </a>
-  <a class="tile-bar" href="mypage.html">
-    <span class="tile-bar-icon">👤</span>
-    <span>マイページ(通報履歴・ポイント)</span>
-  </a>
+<div id="topbar">
+  <a class="menu-link" href="menu.html">☰ メニュー</a>
+  <h1>ヨソモン <span class="beta">β</span></h1>
+  <a id="login-link" href="#">ログイン</a>
 </div>
 
-<a class="game-link" href="game.html">🎮 ヨソモン(β) — 写真判定でキャラを育てる</a>
+<section id="char-area">
+  <div id="char-sprite">🥚</div>
+  <div id="char-level">Lv.1</div>
+  <div class="xp-bar"><div class="xp-bar-fill" id="xp-fill" style="width:0%"></div></div>
+  <div id="xp-label">0 / 20 XP</div>
+</section>
 
-<footer>ログイン不要・匿名で利用できます。</footer>
+<div id="action-wrap">
+  <a href="report.html" class="action-btn primary">📷 通報する</a>
+  <button type="button" id="start-btn" class="action-btn secondary">🔍 写真を判定する</button>
+  <p id="action-desc">通報や写真判定でヨソモンが育ちます</p>
+</div>
+
+<section id="triage-area" hidden>
+  <p id="triage-status"></p>
+  <div id="triage-card" hidden>
+    <img id="triage-img" alt="判定対象の写真">
+    <div class="triage-buttons">
+      <button type="button" data-choice="tree">🌳 木っぽい</button>
+      <button type="button" data-choice="evidence">🪵 証拠あり</button>
+      <button type="button" data-choice="irrelevant">❌ 無関係</button>
+      <button type="button" data-choice="skip" class="skip">🤷 わからない</button>
+    </div>
+  </div>
+  <p class="xp-toast" id="xp-toast"></p>
+  <button type="button" id="triage-close" class="close-triage">判定をやめる</button>
+</section>
+
+<footer>
+  <p class="note">表示される写真は位置情報・投稿者情報を含まないサムネイルのみです。
+    最終判定は自治体の担当者が行います。キャラのビジュアルは仮のものです。</p>
+  <a class="menu-link" href="menu.html">🗺️ 被害マップ・マイページはこちら</a>
+</footer>
 
 <script type="module">
-fetch('/api/health').then((r) => r.json()).then((j) => {
-  if (!j.ok) return;
-  const el = document.getElementById('stats');
-  el.innerHTML = `これまでに <strong>${j.total}</strong> 件の通報が届いています` +
-    (j.confirmed ? `(うち被害確定 <strong>${j.confirmed}</strong> 件)` : '') + '。';
-  el.hidden = false;
-}).catch(() => {}); // 取得に失敗してもランディングページ自体は問題なく表示する
-</script>
+import { getReporterId, bootstrapAuth, googleLoginUrl } from './auth.js';
 
+const $ = (id) => document.getElementById(id);
+let reporterId = getReporterId();
+const authReady = bootstrapAuth().then((r) => { reporterId = r.reporterId; });
+
+// 本物のアート素材が無いための暫定ビジュアル(レベル帯で絵文字が変わるだけ)。
+const LEVEL_SPRITES = [
+  { min: 1, max: 2, emoji: '🥚' },
+  { min: 3, max: 5, emoji: '🐣' },
+  { min: 6, max: 9, emoji: '🐥' },
+  { min: 10, max: Infinity, emoji: '🦅' },
+];
+function spriteForLevel(level) {
+  return (LEVEL_SPRITES.find((s) => level >= s.min && level <= s.max) || LEVEL_SPRITES[0]).emoji;
+}
+
+function renderCharacter(j) {
+  $('char-sprite').textContent = spriteForLevel(j.level);
+  $('char-level').textContent = `Lv.${j.level}`;
+  const pct = Math.round((j.xp_into_level / j.xp_for_next_level) * 100);
+  $('xp-fill').style.width = `${pct}%`;
+  $('xp-label').textContent = `${j.xp_into_level} / ${j.xp_for_next_level} XP`;
+}
+
+async function loadCharacter() {
+  try {
+    const res = await fetch(`/api/character?reporter_id=${reporterId}`);
+    const j = await res.json();
+    if (j.ok) renderCharacter(j);
+  } catch { /* キャラ表示だけなので失敗しても致命的ではない */ }
+}
+
+// セッション内でスキップした通報ID(直近20件まで)。次の候補取得で除外する。
+const skippedIds = [];
+
+async function loadNext() {
+  $('triage-card').hidden = true;
+  $('triage-status').textContent = '写真を探しています...';
+  const params = new URLSearchParams({ voter_id: reporterId });
+  if (skippedIds.length) params.set('exclude', skippedIds.slice(-20).join(','));
+  try {
+    const res = await fetch(`/api/triage/next?${params}`);
+    const j = await res.json();
+    if (!j.ok) { $('triage-status').textContent = j.error || '読み込みに失敗しました'; return; }
+    if (!j.report) {
+      $('triage-status').textContent = '今は判定待ちの写真がありません。また後で来てください!';
+      return;
+    }
+    $('triage-status').textContent = '';
+    $('triage-img').src = j.report.thumb_url;
+    $('triage-card').dataset.reportId = j.report.report_id;
+    $('triage-card').hidden = false;
+  } catch {
+    $('triage-status').textContent = '読み込みに失敗しました';
+  }
+}
+
+// サムネイルが読めない場合(対象がレビュー等で状態変化した等のTOCTOU)は自動で次へ。
+$('triage-img').addEventListener('error', () => { loadNext(); });
+
+function showXpToast(amount) {
+  const el = $('xp-toast');
+  el.textContent = `+${amount} XP`;
+  el.classList.remove('show');
+  void el.offsetWidth;
+  el.classList.add('show');
+  setTimeout(() => { el.classList.remove('show'); }, 1000);
+}
+
+document.querySelectorAll('.triage-buttons button[data-choice]').forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    const reportId = $('triage-card').dataset.reportId;
+    if (!reportId) return;
+    document.querySelectorAll('.triage-buttons button').forEach((b) => { b.disabled = true; });
+
+    const choice = btn.dataset.choice;
+    if (choice === 'skip') {
+      skippedIds.push(reportId);
+    } else {
+      try {
+        await authReady;
+        const res = await fetch('/api/triage/vote', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ report_id: reportId, voter_id: reporterId, choice }),
+        });
+        const j = await res.json();
+        if (j.ok && j.awarded) {
+          showXpToast(2);
+          renderCharacter({
+            level: j.level, xp_total: j.xp_total,
+            xp_into_level: j.xp_total % 20, xp_for_next_level: 20,
+          });
+        }
+      } catch { /* 失敗しても次の写真へは進む(ゲームの流れを止めない) */ }
+    }
+
+    await loadNext();
+    document.querySelectorAll('.triage-buttons button').forEach((b) => { b.disabled = false; });
+  });
+});
+
+$('start-btn').addEventListener('click', () => {
+  $('action-wrap').hidden = true;
+  $('triage-area').hidden = false;
+  loadNext();
+});
+$('triage-close').addEventListener('click', () => {
+  $('triage-area').hidden = true;
+  $('action-wrap').hidden = false;
+});
+
+authReady.then(() => {
+  $('login-link').href = googleLoginUrl(reporterId);
+  loadCharacter();
+});
+</script>
 </body>
 </html>

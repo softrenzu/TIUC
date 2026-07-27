@@ -39,6 +39,7 @@ const TRIAGE_PROMPT = `あなたは市民が投稿した樹木被害通報アプ
 // キャラ育成ゲーム(仮称「ヨソモン」)。トリアージ投票のXPは point_events/points_total とは
 // 完全に別経済(rule3の「投稿の正確性」に紐づく既存ポイントの意味を壊さないため)。
 const XP_PER_VOTE = 2;
+const XP_PER_REPORT = 5;
 const VOTE_HOURLY_LIMIT = 60;
 const VOTE_CHOICES = new Set(["tree", "evidence", "irrelevant"]);
 function resolveVoteChoice(choice) {
@@ -326,12 +327,35 @@ async function createReport(request, env) {
                               points_total = points_total + ?2
           WHERE id = ?1`
       ).bind(reporterId, points),
+      // キャラ育成ゲームのXP(point_events/points_totalとは別経済。rule3参照)。
+      // 通報は一意なイベントで二重送信の衝突を気にする必要がないため、
+      // triageVote のような changes() チェーンは不要。
+      env.DB.prepare(
+        `INSERT INTO xp_events (reporter_id, report_id, kind, amount, created_at)
+         VALUES (?1,?2,'report_submit',?3,?4)`
+      ).bind(reporterId, id, XP_PER_REPORT, now),
+      env.DB.prepare(
+        `INSERT INTO characters (reporter_id, xp_total, level, created_at, updated_at)
+         VALUES (?1,?2,CAST(1 + ?2 / 20 AS INTEGER),?3,?3)
+         ON CONFLICT (reporter_id) DO UPDATE SET
+           xp_total = characters.xp_total + ?2,
+           level = CAST(1 + (characters.xp_total + ?2) / 20 AS INTEGER),
+           updated_at = ?3`
+      ).bind(reporterId, XP_PER_REPORT, now),
     );
   }
   await env.DB.batch(stmts);
 
+  let character = null;
+  if (ai.status !== "auto_rejected") {
+    const char = await env.DB.prepare(
+      "SELECT xp_total, level FROM characters WHERE reporter_id = ?1"
+    ).bind(reporterId).first();
+    if (char) character = { xp_total: char.xp_total, level: char.level, xp_gained: XP_PER_REPORT };
+  }
+
   return Response.json({
-    ok: true, id, mesh3: mesh.mesh3, mesh4: mesh.mesh4, points, status: ai.status,
+    ok: true, id, mesh3: mesh.mesh3, mesh4: mesh.mesh4, points, status: ai.status, character,
     ai_message: ai.status === "auto_rejected"
       ? "写真から幹や樹木の様子が確認できませんでした。木の幹全体が写るように撮り直して、もう一度お試しください。"
       : null,
@@ -846,9 +870,27 @@ async function forceReviewReport(request, env) {
                             points_total = points_total + ?2
         WHERE id = ?1`
     ).bind(reporterId, points),
+    // 通常受理された通報と同じくXPも付与する(結果的に同じ pending_review 状態になるため)。
+    env.DB.prepare(
+      `INSERT INTO xp_events (reporter_id, report_id, kind, amount, created_at)
+       VALUES (?1,?2,'report_submit',?3,?4)`
+    ).bind(reporterId, id, XP_PER_REPORT, now),
+    env.DB.prepare(
+      `INSERT INTO characters (reporter_id, xp_total, level, created_at, updated_at)
+       VALUES (?1,?2,CAST(1 + ?2 / 20 AS INTEGER),?3,?3)
+       ON CONFLICT (reporter_id) DO UPDATE SET
+         xp_total = characters.xp_total + ?2,
+         level = CAST(1 + (characters.xp_total + ?2) / 20 AS INTEGER),
+         updated_at = ?3`
+    ).bind(reporterId, XP_PER_REPORT, now),
   ]);
 
-  return Response.json({ ok: true, points });
+  const char = await env.DB.prepare(
+    "SELECT xp_total, level FROM characters WHERE reporter_id = ?1"
+  ).bind(reporterId).first();
+  const character = char ? { xp_total: char.xp_total, level: char.level, xp_gained: XP_PER_REPORT } : null;
+
+  return Response.json({ ok: true, points, character });
 }
 
 // =====================================================================
