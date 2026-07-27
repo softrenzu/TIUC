@@ -128,6 +128,9 @@ function cardHtml(r) {
   const badges = [];
   if (r.status === 'provisional') badges.push('<span class="tag">地図に公開中</span>');
   if (r.ai_verdict === 'pass') badges.push('<span class="tag">AI:通過</span>');
+  // キャラ育成ゲームの匿名クラウド投票。位置情報等は投票者に見せていないので、
+  // ここでも人数の集計のみ表示する(個々の投票内容は出さない)。
+  if (r.crowd_total > 0) badges.push(`<span class="tag">クラウド ${r.crowd_pass}/${r.crowd_total}</span>`);
 
   return `
   <div class="card ${flags.length ? 'flag' : ''}" data-id="${r.id}">

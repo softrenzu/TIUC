@@ -49,6 +49,8 @@
   #search input[type=date] { width: 100%; font-size: 13px; padding: 5px; border: 1px solid #ddd;
                               border-radius: 6px; }
   #search .resp label { display: flex; align-items: center; gap: 6px; padding: 2px 0; cursor: pointer; }
+  #search .resp i.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block;
+                         flex: none; border: 1.5px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.15); }
 
   #legend .swatches { display: flex; flex-direction: column; gap: 3px; margin-bottom: 4px; }
   #legend .sw { display: flex; align-items: center; gap: 6px; font-size: 12px; }
@@ -99,12 +101,7 @@
   </div>
 
   <h2>対応状況</h2>
-  <div class="row resp">
-    <label><input type="checkbox" value="none" checked> 未対応</label>
-    <label><input type="checkbox" value="scheduled" checked> 対応予定</label>
-    <label><input type="checkbox" value="treating" checked> 対応中</label>
-    <label><input type="checkbox" value="done" checked> 対応済み</label>
-  </div>
+  <div class="row resp" id="resp-filters"></div>
 </div>
 
 <div id="legend" class="dropdown">
@@ -178,6 +175,14 @@ for (const s of MESH_STEPS) {
 for (const k of ['none', 'scheduled', 'treating', 'done']) {
   $('pin-legend').insertAdjacentHTML('beforeend',
     `<div class="sw"><i class="dot" style="background:${STATUS_COLOR[k]}"></i>${STATUS_LABEL[k]}</div>`);
+}
+
+// 対応状況の絞り込みチェックボックスにも凡例と同じ色を表示する(STATUS_COLORを共有し、
+// 色の定義を2箇所に複製しない)。
+for (const k of ['none', 'scheduled', 'treating', 'done']) {
+  $('resp-filters').insertAdjacentHTML('beforeend',
+    `<label><input type="checkbox" value="${k}" checked>` +
+    `<i class="dot" style="background:${STATUS_COLOR[k]}"></i>${STATUS_LABEL[k]}</label>`);
 }
 
 // 未調査(通報0件)の代用指標。survey_mesh(自治体の調査対象データ)は未整備のため、

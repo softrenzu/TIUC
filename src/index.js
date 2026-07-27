@@ -36,6 +36,17 @@ const TRIAGE_PROMPT = `あなたは市民が投稿した樹木被害通報アプ
 必ず次のJSON形式のみで回答してください。説明文は書かないでください。
 {"trunk_visible": true/false, "debris_like": true/false, "clearly_irrelevant": true/false}`;
 
+// キャラ育成ゲーム(仮称「ヨソモン」)。トリアージ投票のXPは point_events/points_total とは
+// 完全に別経済(rule3の「投稿の正確性」に紐づく既存ポイントの意味を壊さないため)。
+const XP_PER_VOTE = 2;
+const VOTE_HOURLY_LIMIT = 60;
+const VOTE_CHOICES = new Set(["tree", "evidence", "irrelevant"]);
+function resolveVoteChoice(choice) {
+  if (choice === "tree") return { trunk_visible: 1, debris_like: 0, clearly_irrelevant: 0 };
+  if (choice === "evidence") return { trunk_visible: 1, debris_like: 1, clearly_irrelevant: 0 };
+  return { trunk_visible: 0, debris_like: 0, clearly_irrelevant: 1 }; // irrelevant
+}
+
 const bad = (error, status = 400) => Response.json({ ok: false, error }, { status });
 
 // =====================================================================
@@ -343,7 +354,10 @@ async function reviewQueue(request, env, reviewer) {
             (SELECT COUNT(*) FROM reports x
               WHERE x.mesh5 = r.mesh5 AND x.id <> r.id
                 AND x.created_at > r.created_at - 2592000
-                AND x.status IN ('pending_review','provisional','confirmed')) AS nearby
+                AND x.status IN ('pending_review','provisional','confirmed')) AS nearby,
+            (SELECT COUNT(*) FROM triage_votes v WHERE v.report_id = r.id) AS crowd_total,
+            (SELECT COUNT(*) FILTER (WHERE trunk_visible = 1 OR debris_like = 1)
+               FROM triage_votes v WHERE v.report_id = r.id) AS crowd_pass
        FROM reports r
        JOIN reporters rp ON rp.id = r.reporter_id
       WHERE r.status IN ('pending_review','provisional')
@@ -838,6 +852,142 @@ async function forceReviewReport(request, env) {
 }
 
 // =====================================================================
+// キャラ育成ゲーム(仮称「ヨソモン」)
+//   通報された写真の一次振り分け(トリアージ)を市民参加のミニゲームにする。
+//   投票者に見せるのはサムネイルのみで、位置情報・メモ・通報者情報は一切渡さない
+//   (rule1は変えない。最終判定権限は今まで通りレビュアーのみ)。
+// =====================================================================
+function xpToLevel(xp) {
+  return 1 + Math.floor(xp / 20);
+}
+
+async function getCharacter(request, env) {
+  const url = new URL(request.url);
+  const reporterId = String(url.searchParams.get("reporter_id") || "");
+  if (!UUID_RE.test(reporterId)) return bad("通報者IDが不正です");
+
+  const row = await env.DB.prepare(
+    "SELECT xp_total, level FROM characters WHERE reporter_id = ?1"
+  ).bind(reporterId).first();
+
+  const xpTotal = row?.xp_total ?? 0;
+  return Response.json({
+    ok: true,
+    level: row?.level ?? xpToLevel(xpTotal),
+    xp_total: xpTotal,
+    xp_into_level: xpTotal % 20,
+    xp_for_next_level: 20,
+  });
+}
+
+async function triageNext(request, env) {
+  const url = new URL(request.url);
+  const voterId = String(url.searchParams.get("voter_id") || "");
+  if (!UUID_RE.test(voterId)) return bad("投票者IDが不正です");
+
+  const exclude = String(url.searchParams.get("exclude") || "")
+    .split(",").map((s) => s.trim()).filter(UUID_RE.test.bind(UUID_RE)).slice(0, 20);
+  const excludeSql = exclude.length
+    ? `AND r.id NOT IN (${exclude.map((_, i) => `?${i + 2}`).join(",")})` : "";
+
+  const row = await env.DB.prepare(
+    `SELECT r.id, r.thumb_key,
+            (SELECT COUNT(*) FROM triage_votes v WHERE v.report_id = r.id) AS vote_count
+       FROM reports r
+      WHERE r.status IN ('pending_review','provisional')
+        AND r.reporter_id <> ?1
+        AND NOT EXISTS (SELECT 1 FROM triage_votes v2
+                         WHERE v2.report_id = r.id AND v2.voter_id = ?1)
+        ${excludeSql}
+      ORDER BY vote_count ASC, r.created_at ASC
+      LIMIT 1`
+  ).bind(voterId, ...exclude).first();
+
+  if (!row) return Response.json({ ok: true, report: null });
+  return Response.json({
+    ok: true,
+    report: {
+      report_id: row.id,
+      thumb_url: `/img/${row.thumb_key}?voter_id=${encodeURIComponent(voterId)}`,
+    },
+  });
+}
+
+async function triageVote(request, env) {
+  const body = await request.json();
+  const reportId = String(body.report_id || "");
+  const voterId = String(body.voter_id || "");
+  if (!UUID_RE.test(voterId)) return bad("投票者IDが不正です");
+  const choice = String(body.choice || "");
+  if (!VOTE_CHOICES.has(choice)) return bad("判定の指定が不正です");
+
+  const rate = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM triage_votes WHERE voter_id = ?1 AND created_at > unixepoch() - 3600"
+  ).bind(voterId).first();
+  if ((rate?.n ?? 0) >= VOTE_HOURLY_LIMIT) {
+    return bad("短時間の判定が多すぎます。しばらく待ってから再度お試しください", 429);
+  }
+
+  const target = await env.DB.prepare(
+    "SELECT reporter_id, status FROM reports WHERE id = ?1"
+  ).bind(reportId).first();
+  if (!target) return bad("該当する通報がありません", 404);
+  if (target.reporter_id === voterId) return bad("自分の通報には投票できません");
+  if (!["pending_review", "provisional"].includes(target.status)) {
+    return bad("この通報は判定対象ではありません");
+  }
+
+  const { trunk_visible, debris_like, clearly_irrelevant } = resolveVoteChoice(choice);
+  const now = Math.floor(Date.now() / 1000);
+
+  // 1回の batch() でまとめる: 投票の記録とXP付与が別々のD1呼び出しだと、失敗時に
+  // 「投票は記録されたのにXPだけ消える」不整合が起きる(rule7と同じ思想)。
+  // changes() で前の文の結果を見て後続を条件付きにすることで、二重投票時は
+  // xp_events/characters のどちらにも一切書き込まれない(INSERT...SELECT形式なので
+  // ON CONFLICT DO UPDATE 側も含めて丸ごとスキップされる)。
+  const results = await env.DB.batch([
+    // reactions と同じ流儀: 投票者の reporters 行は createReport 等を一度も経由していない
+    // かもしれないので、FK 制約に触れる前に必ず遅延作成しておく。
+    env.DB.prepare(
+      "INSERT INTO reporters (id, created_at) VALUES (?1, ?2) ON CONFLICT(id) DO NOTHING"
+    ).bind(voterId, now),
+    env.DB.prepare(
+      `INSERT INTO triage_votes (report_id, voter_id, trunk_visible, debris_like,
+                                  clearly_irrelevant, created_at)
+       VALUES (?1,?2,?3,?4,?5,?6)
+       ON CONFLICT (report_id, voter_id) DO NOTHING`
+    ).bind(reportId, voterId, trunk_visible, debris_like, clearly_irrelevant, now),
+    env.DB.prepare(
+      `INSERT INTO xp_events (reporter_id, report_id, kind, amount, created_at)
+       SELECT ?1, ?2, 'triage_vote', ?3, ?4
+        WHERE changes() = 1`
+    ).bind(voterId, reportId, XP_PER_VOTE, now),
+    env.DB.prepare(
+      // D1 が渡す束縛値の型次第で ?2/20 が REAL 除算になりうる(整数同士でも)。
+      // STRICT テーブルの INTEGER 列は端数のある REAL を拒否するため CAST で明示的に整数化する。
+      `INSERT INTO characters (reporter_id, xp_total, level, created_at, updated_at)
+       SELECT ?1, ?2, CAST(1 + ?2 / 20 AS INTEGER), ?3, ?3
+        WHERE changes() = 1
+       ON CONFLICT (reporter_id) DO UPDATE SET
+         xp_total = characters.xp_total + ?2,
+         level = CAST(1 + (characters.xp_total + ?2) / 20 AS INTEGER),
+         updated_at = ?3`
+    ).bind(voterId, XP_PER_VOTE, now),
+  ]);
+  const awarded = results[1].meta.changes > 0;
+
+  const char = await env.DB.prepare(
+    "SELECT xp_total, level FROM characters WHERE reporter_id = ?1"
+  ).bind(voterId).first();
+
+  return Response.json({
+    ok: true, awarded,
+    level: char?.level ?? 1,
+    xp_total: char?.xp_total ?? 0,
+  });
+}
+
+// =====================================================================
 // Google ログイン(任意)
 //   ゲストの唯一の弱点(端末をまたぐと reporter_id が引き継げない)を
 //   解消するためだけの機能。不正対策・レート制限には一切関与しない
@@ -1049,6 +1199,17 @@ export default {
         return await forceReviewReport(request, env);
       }
 
+      // --- キャラ育成ゲーム(仮称「ヨソモン」) ---
+      if (path === "/api/character" && request.method === "GET") {
+        return await getCharacter(request, env);
+      }
+      if (path === "/api/triage/next" && request.method === "GET") {
+        return await triageNext(request, env);
+      }
+      if (path === "/api/triage/vote" && request.method === "POST") {
+        return await triageVote(request, env);
+      }
+
       // --- Google ログイン(任意。ゲストと並行して使える) ---
       if (path === "/api/auth/google/start" && request.method === "GET") {
         return await googleAuthStart(request, env, cookieAttrs);
@@ -1126,6 +1287,23 @@ export default {
             const row = await env.DB.prepare(
               "SELECT 1 FROM reports WHERE (image_key = ?1 OR thumb_key = ?1) AND reporter_id = ?2"
             ).bind(key, reporterId).first();
+            authorized = !!row;
+          }
+        }
+        // トリアージ投票(キャラ育成ゲーム)用の匿名投票者。thumb_key にしかマッチさせない
+        // (image_key はここでは絶対に許可しない — フル解像度・私有地写真の新規露出を防ぐ)。
+        // 未レビューかつ自分の投稿でなく、まだ投票していない場合のみ許可。
+        if (!authorized) {
+          const voterId = String(url.searchParams.get("voter_id") || "");
+          if (UUID_RE.test(voterId)) {
+            const row = await env.DB.prepare(
+              `SELECT 1 FROM reports r
+                WHERE r.thumb_key = ?1
+                  AND r.status IN ('pending_review','provisional')
+                  AND r.reporter_id <> ?2
+                  AND NOT EXISTS (SELECT 1 FROM triage_votes v
+                                   WHERE v.report_id = r.id AND v.voter_id = ?2)`
+            ).bind(key, voterId).first();
             authorized = !!row;
           }
         }
