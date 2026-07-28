@@ -2,25 +2,42 @@
 <html lang="ja">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>マイページ</title>
+<title>マイページ - モリノミカタ</title>
+<link rel="stylesheet" href="tokens.css">
 <style>
   :root { --line:#ddd; --muted:#666; --warn:#a33; --ok:#161; }
   * { box-sizing: border-box; }
   body { font-family: system-ui, -apple-system, sans-serif; margin: 0 auto; padding: 16px;
          max-width: 520px; line-height: 1.6; color: #222; }
+
+  #topbar { display: flex; align-items: center; justify-content: space-between; margin: 0 0 8px; }
+  #topbar a { font-size: 12px; color: var(--muted); text-decoration: none; }
+  #buddy-badge { display: flex; align-items: center; gap: 4px; font-size: 12px;
+                 border: 1px solid var(--line); border-radius: var(--radius-pill);
+                 padding: 3px 10px 3px 6px; }
+  #buddy-emoji { font-size: 16px; }
+  #buddy-level { font-weight: 700; }
+
   h1 { font-size: 19px; margin: 0 0 4px; }
-  h2 { font-size: 15px; margin: 22px 0 8px; }
-  .lead { color: var(--muted); font-size: 13px; margin: 0 0 20px; }
+  h2 { font-size: 15px; margin: 24px 0 8px; display: flex; align-items: baseline; gap: 8px; }
+  h2 .h2-sub { font-size: 12px; font-weight: 400; color: var(--muted); }
+  .lead { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
   .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .stat { border: 1px solid var(--line); border-radius: 10px; padding: 12px; text-align: center; }
+  .stat { border: 1px solid var(--line); border-radius: var(--radius-card, 10px); padding: 12px; text-align: center; }
   .stat .n { font-size: 22px; font-weight: 600; }
   .stat .label { font-size: 12px; color: var(--muted); margin-top: 2px; }
-  .card { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+  .rank-row { display: flex; gap: 8px; margin-top: 8px; }
+  .rank-pill { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+               border: 1px solid var(--line); border-radius: var(--radius-pill); padding: 8px 10px;
+               font-size: 13px; }
+  .rank-pill .n { font-weight: 700; }
+  .card { border: 1px solid var(--line); border-radius: var(--radius-card, 10px); padding: 10px 12px; margin-bottom: 8px; }
   .card .row1 { display: flex; justify-content: space-between; align-items: center; font-size: 13px; gap: 8px; }
   .badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px;
            border: 1px solid var(--line); white-space: nowrap; }
   .badge.ok   { border-color: var(--ok); color: var(--ok); }
   .badge.warn { border-color: var(--warn); color: var(--warn); }
+  .badge.new  { border-color: var(--color-secondary, #1a4d73); color: var(--color-secondary, #1a4d73); }
   .note { font-size: 12px; margin-top: 6px; background: #f2f6fb; border: 1px solid #cddbea;
           border-radius: 8px; padding: 8px; }
   .memo { font-size: 12px; margin-top: 6px; color: var(--muted); }
@@ -32,9 +49,43 @@
   .delta.plus  { color: var(--ok); }
   .delta.minus { color: var(--warn); }
   .empty { color: var(--muted); font-size: 13px; padding: 12px 0; }
+  .empty-cta { text-align: center; border: 1px dashed var(--line); border-radius: var(--radius-card, 10px);
+               padding: 22px 16px; }
+  .empty-cta .icon { font-size: 30px; }
+  .empty-cta p { font-size: 13px; color: var(--muted); margin: 8px 0 14px; }
+  .empty-cta a { display: inline-block; padding: 10px 18px; border-radius: var(--radius-pill);
+                 background: var(--color-accent, #1a5c3a); color: #fff; text-decoration: none; font-size: 14px; }
   .status { font-size: 13px; color: var(--muted); }
   .warn { color: var(--warn); }
   .mono { font-family: ui-monospace, monospace; }
+
+  /* 図鑑 */
+  .zukan-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .zukan-slot { aspect-ratio: 1/1; border: 1px solid var(--line); border-radius: var(--radius-sm, 8px);
+                display: flex; align-items: center; justify-content: center; font-size: 18px;
+                background: #f7f7f5; color: #ccc; }
+  .zukan-slot.filled { background: var(--color-accent-soft, #eef5f0); border-color: var(--color-accent, #1a5c3a);
+                        color: #222; }
+
+  /* クエスト */
+  .quest-card { display: flex; align-items: center; gap: 10px; }
+  .quest-body { flex: 1; min-width: 0; }
+  .quest-title { font-size: 13px; font-weight: 600; }
+  .quest-desc { font-size: 11px; color: var(--muted); }
+  .quest-reward { font-size: 11px; color: var(--color-accent, #1a5c3a); margin-top: 2px; }
+  .quest-card.done { opacity: .6; }
+  .quest-claim { flex: none; padding: 8px 12px; font-size: 12px; border-radius: var(--radius-pill);
+                 border: 1px solid var(--color-accent, #1a5c3a); background: #fff;
+                 color: var(--color-accent, #1a5c3a); cursor: pointer; white-space: nowrap; }
+  .quest-claim:disabled { border-color: var(--line); color: var(--muted); cursor: default; }
+  .quest-claim.ready { background: var(--color-accent, #1a5c3a); color: #fff; }
+
+  /* 地域インパクト */
+  .impact-card { display: flex; gap: 8px; }
+  .impact-tile { flex: 1; text-align: center; border: 1px solid var(--line);
+                 border-radius: var(--radius-card, 10px); padding: 12px 6px; }
+  .impact-tile .n { font-size: 20px; font-weight: 600; }
+  .impact-tile .label { font-size: 11px; color: var(--muted); margin-top: 2px; }
 
   #reports .card { cursor: pointer; -webkit-tap-highlight-color: transparent; }
   .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex;
@@ -62,13 +113,26 @@
 </style>
 <body>
 
-<p class="status" style="margin:0 0 8px"><a href="/">← トップに戻る</a></p>
+<div id="topbar">
+  <a href="/">← モリノミカタに戻る</a>
+  <div id="buddy-badge"><span id="buddy-emoji">🥚</span><span id="buddy-level">Lv.1</span></div>
+</div>
 <h1>マイページ</h1>
-<p class="lead">これまでの通報とポイントの履歴です。</p>
+<p class="lead">これまでの記録と、育てている相棒の成長です。</p>
 
 <div id="account" class="card" style="margin-bottom:16px"></div>
 
 <div class="stats" id="stats"></div>
+<div class="rank-row" id="rank-row"></div>
+
+<h2>図鑑 <span class="h2-sub" id="zukan-count"></span></h2>
+<div id="zukan"></div>
+
+<h2>クエスト</h2>
+<div id="quests"></div>
+
+<h2>地域のようす</h2>
+<div id="impact"></div>
 
 <h2>通報履歴</h2>
 <div id="reports"></div>
@@ -117,6 +181,7 @@ const KIND_LABEL = {
   negative_survey: '異常なし報告', duplicate_penalty: '重複調整',
   revoke: '取り消し', manual: '手動調整',
 };
+const FINDING_ICON = { frass: '🪵', adult_alive: '🐛', adult_dead: '💀', exit_hole: '🕳️' };
 
 const jst = (t) => t ? new Date(t * 1000).toLocaleDateString('ja-JP',
   { timeZone: 'Asia/Tokyo', year: 'numeric', month: 'numeric', day: 'numeric' }) : '—';
@@ -125,35 +190,164 @@ function escapeHtml(s) {
   return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
 
+// --- 相棒バッジ(常駐。report.html と同じ暫定ビジュアル) -------------------
+const LEVEL_SPRITES = [
+  { min: 1, max: 2, emoji: '🥚' },
+  { min: 3, max: 5, emoji: '🐣' },
+  { min: 6, max: 9, emoji: '🐦' },
+  { min: 10, max: Infinity, emoji: '🦅' },
+];
+function spriteForLevel(level) {
+  return (LEVEL_SPRITES.find((s) => level >= s.min && level <= s.max) || LEVEL_SPRITES[0]).emoji;
+}
+async function loadBuddyBadge() {
+  try {
+    const res = await fetch(`/api/character?reporter_id=${reporterId}`);
+    const j = await res.json();
+    if (j.ok) {
+      $('buddy-emoji').textContent = spriteForLevel(j.level);
+      $('buddy-level').textContent = `Lv.${j.level}`;
+    }
+  } catch { /* バッジだけなので失敗しても致命的ではない */ }
+}
+
 function renderStats(s) {
   $('stats').innerHTML = `
     <div class="stat"><div class="n">${s.points_total}</div><div class="label">合計ポイント</div></div>
     <div class="stat"><div class="n">${s.submitted_count}</div><div class="label">通報数</div></div>
     <div class="stat"><div class="n">${s.confirmed_count}</div><div class="label">被害確定</div></div>
     <div class="stat"><div class="n">${s.rejected_count}</div><div class="label">該当なし</div></div>`;
+  $('rank-row').innerHTML = `
+    <div class="rank-pill">🏅 ハンターランク <span class="n">${escapeHtml(s.hunter_rank)}</span></div>
+    <div class="rank-pill">🔥 定点観測 <span class="n">${s.streak_count}</span>連続</div>`;
+}
+
+function emptyCta(icon, text, linkText) {
+  return `<div class="empty-cta">
+    <div class="icon">${icon}</div>
+    <p>${text}</p>
+    <a href="report.html">${linkText}</a>
+  </div>`;
 }
 
 let currentReports = [];
 function renderReports(items) {
   currentReports = items;
   if (!items.length) {
-    $('reports').innerHTML = '<p class="empty">まだ通報がありません。</p>';
+    $('reports').innerHTML = emptyCta('📷', 'まだ記録がありません。最初の一件を送ってみましょう。',
+      'ヨソモンを記録する');
     return;
   }
+  const now = Math.floor(Date.now() / 1000);
   $('reports').innerHTML = items.map((r) => {
     const badgeClass = STATUS_CLASS[r.status] || '';
     const respLabel = r.response_status ? RESPONSE_LABEL[r.response_status] : null;
+    const updated = r.response_updated_at && (now - r.response_updated_at) < 30 * 86400;
     return `
     <div class="card" data-id="${r.id}">
       <div class="row1">
         <span>${FINDING[r.finding] || r.finding} / ${SPECIES[r.tree_species] || '—'}</span>
-        <span class="badge ${badgeClass}">${STATUS_LABEL[r.status] || r.status}</span>
+        <span style="display:flex;gap:4px;align-items:center">
+          ${updated ? '<span class="badge new">🔔 更新あり</span>' : ''}
+          <span class="badge ${badgeClass}">${STATUS_LABEL[r.status] || r.status}</span>
+        </span>
       </div>
       <div class="status">${jst(r.observed_at || r.created_at)}${respLabel ? ` ・ ${respLabel}` : ''}</div>
       ${r.note ? `<div class="memo">${escapeHtml(r.note)}</div>` : ''}
       ${r.response_note ? `<div class="note">${escapeHtml(r.response_note)}</div>` : ''}
     </div>`;
   }).join('');
+}
+
+// --- 図鑑 --------------------------------------------------------------
+async function loadZukan() {
+  try {
+    const res = await fetch(`/api/encyclopedia?reporter_id=${reporterId}`);
+    const j = await res.json();
+    if (!j.ok) return;
+    $('zukan-count').textContent = `${j.count} / ${j.total}`;
+    $('zukan').innerHTML = `<div class="zukan-grid">${j.slots.map((s) => `
+      <div class="zukan-slot ${s.filled ? 'filled' : ''}"
+           title="${FINDING[s.finding] || s.finding} / ${SPECIES[s.tree_species] || s.tree_species}">
+        ${s.filled ? (FINDING_ICON[s.finding] || '✅') : '?'}
+      </div>`).join('')}</div>`;
+  } catch {
+    $('zukan').innerHTML = '<p class="empty">図鑑を読み込めませんでした。</p>';
+  }
+}
+
+// --- クエスト ------------------------------------------------------------
+async function loadQuests() {
+  try {
+    const res = await fetch(`/api/quests?reporter_id=${reporterId}`);
+    const j = await res.json();
+    if (!j.ok) return;
+    if (!j.quests.length) { $('quests').innerHTML = '<p class="empty">クエストがありません。</p>'; return; }
+    $('quests').innerHTML = j.quests.map((q) => {
+      const locked = q.seasonal && !q.active;
+      let btnLabel = '未達成', btnClass = '', disabled = true;
+      if (q.claimed) { btnLabel = '受取済み'; }
+      else if (locked) { btnLabel = '期間外'; }
+      else if (q.achieved) { btnLabel = '受け取る'; btnClass = 'ready'; disabled = false; }
+      return `
+      <div class="card quest-card ${q.claimed ? 'done' : ''}">
+        <div class="quest-body">
+          <div class="quest-title">${escapeHtml(q.title)}${q.seasonal ? ' 🌞' : ''}</div>
+          <div class="quest-desc">${escapeHtml(q.desc)}</div>
+          <div class="quest-reward">+${q.reward} XP</div>
+        </div>
+        <button type="button" class="quest-claim ${btnClass}" data-quest="${q.id}" ${disabled ? 'disabled' : ''}>${btnLabel}</button>
+      </div>`;
+    }).join('');
+    $('quests').querySelectorAll('.quest-claim.ready').forEach((btn) => {
+      btn.addEventListener('click', () => claimQuest(btn.dataset.quest, btn));
+    });
+  } catch {
+    $('quests').innerHTML = '<p class="empty">クエストを読み込めませんでした。</p>';
+  }
+}
+
+async function claimQuest(questId, btn) {
+  btn.disabled = true;
+  btn.textContent = '受取中...';
+  try {
+    const res = await fetch('/api/quests/claim', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ reporter_id: reporterId, quest_id: questId }),
+    });
+    const j = await res.json();
+    if (!j.ok || !j.awarded) throw new Error(j.error || '受け取れませんでした');
+    await loadQuests();
+    await loadBuddyBadge();
+    const summary = await fetch(`/api/mypage?reporter_id=${reporterId}`).then((r) => r.json());
+    if (summary.ok) renderStats(summary.summary);
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = e.message;
+  }
+}
+
+// --- 地域のようす --------------------------------------------------------
+async function loadImpact() {
+  try {
+    const res = await fetch(`/api/impact?reporter_id=${reporterId}`);
+    const j = await res.json();
+    if (!j.ok) return;
+    if (!j.available) {
+      $('impact').innerHTML = emptyCta('🗾', '通報すると、その地域のようすがここに表示されます。',
+        'ヨソモンを記録する');
+      return;
+    }
+    $('impact').innerHTML = `
+      <div class="impact-card">
+        <div class="impact-tile"><div class="n">${j.month_total}</div><div class="label">今月の記録件数</div></div>
+        <div class="impact-tile"><div class="n">${j.month_confirmed}</div><div class="label">うち被害確定</div></div>
+        <div class="impact-tile"><div class="n">${j.rank ?? '—'} / ${j.participants}</div><div class="label">このエリアでの順位</div></div>
+      </div>
+      <p class="status" style="margin-top:6px">あなたの周辺(約1kmメッシュ)の今月の集計です。</p>`;
+  } catch {
+    $('impact').innerHTML = '<p class="empty">地域のようすを読み込めませんでした。</p>';
+  }
 }
 
 // --- 通報詳細(タップで開く。写真は本人限定の /img/ アクセス経路を使う) ------------
@@ -279,7 +473,7 @@ $('detail-modal').addEventListener('click', (e) => {
 
 function renderLedger(items) {
   if (!items.length) {
-    $('ledger').innerHTML = '<p class="empty">まだポイント履歴がありません。</p>';
+    $('ledger').innerHTML = '<p class="empty">通報するとここにポイント履歴が記録されます。</p>';
     return;
   }
   $('ledger').innerHTML = items.map((e) => {
@@ -327,6 +521,10 @@ async function main() {
   renderStats(j.summary);
   renderReports(j.reports);
   renderLedger(j.point_events);
+  loadZukan();
+  loadQuests();
+  loadImpact();
+  loadBuddyBadge();
 }
 
 $('page-status').textContent = '読み込み中...';

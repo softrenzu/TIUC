@@ -1,0 +1,28 @@
+/* デザイントークン。差し色1色・広めの余白・角丸カードを軸にした共通CSS変数。
+   index.html / report.html / mypage.html から読み込む(他ページは対象外、既存の
+   見た目を壊さないため)。値そのものは既存ページで使ってきた色を踏襲している
+   (通報=緑 #1a5c3a、マップ=青 #1a4d73)ので、既存の配色との衝突はない。 */
+:root {
+  --color-accent: #1a5c3a;
+  --color-accent-dark: #164a30;
+  --color-accent-soft: #eef5f0;
+  --color-secondary: #1a4d73;
+  --color-secondary-dark: #163f5e;
+  --color-secondary-soft: #e8f1f8;
+  --color-line: #ddd;
+  --color-muted: #666;
+  --color-warn: #a33;
+  --color-ok: #161;
+  --color-text: #222;
+
+  --radius-card: 16px;
+  --radius-pill: 999px;
+  --radius-sm: 8px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+}

@@ -2,7 +2,8 @@
 <html lang="ja">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ヨソモン(β)</title>
+<title>モリノミカタ(β)</title>
+<link rel="stylesheet" href="tokens.css">
 <style>
   :root { --line:#ddd; --muted:#666; --warn:#a33; --ok:#161; }
   * { box-sizing: border-box; }
@@ -70,7 +71,7 @@
   #levelup-title { font-size: 18px; font-weight: 700; margin: 0 0 12px; color: #1a5c3a; }
   #levelup-sprite { font-size: 72px; line-height: 1; margin: 0 0 8px; }
   #levelup-level { font-size: 22px; font-weight: 700; margin: 0 0 20px; }
-  #levelup-close { width: 100%; }
+  #levelup-modal .modal-card .action-btn { margin-top: 8px; }
 
   footer { flex: none; padding: 12px 16px; }
   footer .note { font-size: 11px; color: var(--muted); margin: 0 0 8px; text-align: center; }
@@ -82,7 +83,7 @@
 
 <div id="topbar">
   <a class="menu-link" href="menu.html">☰ メニュー</a>
-  <h1>ヨソモン <span class="beta">β</span></h1>
+  <h1>モリノミカタ <span class="beta">β</span></h1>
   <a id="login-link" href="#">ログイン</a>
 </div>
 
@@ -94,9 +95,9 @@
 </section>
 
 <div id="action-wrap">
-  <a href="report.html" class="action-btn primary">📷 通報する</a>
+  <a href="report.html" class="action-btn primary">📷 ヨソモンを記録する</a>
   <button type="button" id="start-btn" class="action-btn secondary">🔍 写真を判定する</button>
-  <p id="action-desc">通報や写真判定でヨソモンが育ちます</p>
+  <p id="action-desc">外来種「ヨソモン」を見つけて記録すると、相棒のキツツキが育ちます</p>
 </div>
 
 <section id="triage-area" hidden>
@@ -116,7 +117,7 @@
 
 <footer>
   <p class="note">表示される写真は位置情報・投稿者情報を含まないサムネイルのみです。
-    最終判定は自治体の担当者が行います。キャラのビジュアルは仮のものです。</p>
+    最終判定は自治体の担当者が行います。相棒のビジュアルは仮のものです。</p>
   <a class="menu-link" href="menu.html">🗺️ 被害マップ・マイページはこちら</a>
 </footer>
 
@@ -125,6 +126,7 @@
     <p id="levelup-title">🎉 レベルアップ!</p>
     <div id="levelup-sprite">🐣</div>
     <p id="levelup-level">Lv.2</p>
+    <button type="button" id="levelup-share" class="action-btn secondary">📤 シェア</button>
     <button type="button" id="levelup-close" class="action-btn primary">つづける</button>
   </div>
 </div>
@@ -148,6 +150,7 @@ function spriteForLevel(level) {
 }
 
 let lastLevel = 1;
+let shareLevel = 1;
 
 function renderCharacter(j) {
   $('char-sprite').textContent = spriteForLevel(j.level);
@@ -158,17 +161,116 @@ function renderCharacter(j) {
   lastLevel = j.level;
 }
 
+// --- 手応え(紙吹雪・チャイム音・触覚)。いずれも外部アセット不要、非対応環境は自然にno-op ---
+function vibrate(pattern) {
+  try { navigator.vibrate?.(pattern); } catch { /* 非対応環境は無視 */ }
+}
+
+function fireConfetti() {
+  const canvas = document.createElement('canvas');
+  canvas.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:30;';
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  document.body.appendChild(canvas);
+  const ctx = canvas.getContext('2d');
+  const colors = ['#1a5c3a', '#1a4d73', '#eda100', '#e34948', '#4a3aa7'];
+  const pieces = Array.from({ length: 70 }, () => ({
+    x: Math.random() * canvas.width, y: -20 - Math.random() * canvas.height * 0.3,
+    size: 4 + Math.random() * 5, color: colors[Math.floor(Math.random() * colors.length)],
+    vy: 2 + Math.random() * 3, vx: (Math.random() - 0.5) * 2,
+    rot: Math.random() * Math.PI, vrot: (Math.random() - 0.5) * 0.3,
+  }));
+  const start = performance.now();
+  function frame(t) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (const p of pieces) {
+      p.x += p.vx; p.y += p.vy; p.rot += p.vrot;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+      ctx.restore();
+    }
+    if (t - start < 1800) requestAnimationFrame(frame);
+    else canvas.remove();
+  }
+  requestAnimationFrame(frame);
+}
+
+function playChime() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    [523.25, 659.25, 783.99].forEach((freq, i) => { // C5-E5-G5の軽い上昇アルペジオ
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      const t0 = ctx.currentTime + i * 0.1;
+      gain.gain.setValueAtTime(0.0001, t0);
+      gain.gain.exponentialRampToValueAtTime(0.2, t0 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.3);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t0);
+      osc.stop(t0 + 0.35);
+    });
+    setTimeout(() => ctx.close(), 800);
+  } catch { /* 音が鳴らなくても致命的ではない */ }
+}
+
+async function shareCard(level, emoji) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 600; canvas.height = 700;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#eef5f0';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#1a5c3a';
+  ctx.font = 'bold 32px sans-serif';
+  ctx.fillText('モリノミカタ', canvas.width / 2, 80);
+  ctx.font = '180px sans-serif';
+  ctx.fillText(emoji, canvas.width / 2, 380);
+  ctx.font = 'bold 48px sans-serif';
+  ctx.fillStyle = '#222';
+  ctx.fillText(`Lv.${level}`, canvas.width / 2, 470);
+  ctx.font = '20px sans-serif';
+  ctx.fillStyle = '#666';
+  ctx.fillText('外来種ヨソモンを見つけて相棒を育てよう', canvas.width / 2, 540);
+
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+  if (!blob) return;
+  const file = new File([blob], 'monimikata.png', { type: 'image/png' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: 'モリノミカタ', text: `Lv.${level}になりました!` });
+      return;
+    } catch { /* ユーザーがキャンセルした場合など。ダウンロードにフォールバック */ }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'monimikata.png';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 function showLevelUp(prevLevel, newLevel) {
   const evolved = spriteForLevel(newLevel) !== spriteForLevel(prevLevel);
-  $('levelup-title').textContent = evolved ? '🎉 ヨソモンが進化した!' : '🎉 レベルアップ!';
+  $('levelup-title').textContent = evolved ? '🎉 相棒が進化した!' : '🎉 レベルアップ!';
   $('levelup-sprite').textContent = spriteForLevel(newLevel);
   $('levelup-level').textContent = `Lv.${newLevel}`;
   $('levelup-modal').hidden = false;
+  shareLevel = newLevel;
+  fireConfetti();
+  playChime();
+  vibrate([40, 30, 40, 30, 80]);
 }
 $('levelup-close').addEventListener('click', () => { $('levelup-modal').hidden = true; });
 $('levelup-modal').addEventListener('click', (e) => {
   if (e.target === $('levelup-modal')) $('levelup-modal').hidden = true;
 });
+$('levelup-share').addEventListener('click', () => shareCard(shareLevel, spriteForLevel(shareLevel)));
 
 async function loadCharacter() {
   try {
@@ -234,6 +336,7 @@ document.querySelectorAll('.triage-buttons button[data-choice]').forEach((btn) =
         const j = await res.json();
         if (j.ok && j.awarded) {
           showXpToast(2);
+          vibrate(20);
           const prevLevel = lastLevel;
           renderCharacter(j);
           if (j.leveled_up) showLevelUp(prevLevel, j.level);

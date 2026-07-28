@@ -2,27 +2,60 @@
 <html lang="ja">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>クビアカツヤカミキリ 通報</title>
+<title>ヨソモンを記録 - モリノミカタ</title>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
+<link rel="stylesheet" href="tokens.css">
 <style>
   :root { --line:#ddd; --muted:#666; --warn:#a33; --ok:#161; }
   * { box-sizing: border-box; }
   body { font-family: system-ui, -apple-system, sans-serif; margin: 0 auto; padding: 16px;
          max-width: 520px; line-height: 1.6; color: #222; }
+
+  #topbar { display: flex; align-items: center; justify-content: space-between; margin: 0 0 8px; }
+  #topbar a { font-size: 12px; color: var(--muted); text-decoration: none; }
+  #buddy-badge { display: flex; align-items: center; gap: 4px; font-size: 12px;
+                 border: 1px solid var(--line); border-radius: var(--radius-pill);
+                 padding: 3px 10px 3px 6px; }
+  #buddy-emoji { font-size: 16px; }
+  #buddy-level { font-weight: 700; }
+
   h1 { font-size: 19px; margin: 0 0 4px; }
-  .lead { color: var(--muted); font-size: 13px; margin: 0 0 20px; }
-  fieldset { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin: 0 0 14px; }
+  .lead { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
+
+  #progress-bar { height: 6px; border-radius: var(--radius-pill); background: #e3e3df;
+                   overflow: hidden; margin: 0 0 4px; }
+  #progress-fill { height: 100%; background: var(--color-accent, #1a5c3a); border-radius: var(--radius-pill);
+                    transition: width .25s ease; }
+  #step-label { font-size: 11px; color: var(--muted); margin: 0 0 16px; }
+
+  .step[hidden] { display: none; }
+  .step-nav { display: flex; gap: 8px; margin: 4px 0 20px; }
+  .step-nav button { flex: 1; padding: 12px; font-size: 14px; border-radius: var(--radius-sm);
+                      cursor: pointer; }
+  .step-nav .next-btn { border: 0; background: var(--color-accent, #1a5c3a); color: #fff; }
+  .step-nav .next-btn:disabled { background: #bbb; cursor: default; }
+  .step-nav .back-btn { border: 1px solid var(--line); background: #fff; color: #222; }
+
+  fieldset { border: 1px solid var(--line); border-radius: var(--radius-card, 10px); padding: 12px; margin: 0 0 8px; }
   legend { font-size: 13px; color: var(--muted); padding: 0 6px; }
   .choices { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .choices label { border: 1px solid var(--line); border-radius: 8px; padding: 10px;
+  .choices label { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px;
                    text-align: center; font-size: 14px; cursor: pointer; position: relative; }
   .choices input { position: absolute; opacity: 0; }
-  .choices label:has(input:checked) { border-color: #333; background: #f4f4f2; font-weight: 500; }
+  .choices label:has(input:checked) { border-color: var(--color-accent, #333); border-width: 2px;
+                                       background: var(--color-accent-soft, #f4f4f2); font-weight: 500; }
+  .choices.icon-choices label { padding: 14px 8px; display: flex; flex-direction: column;
+                                 align-items: center; gap: 4px; min-height: 84px; justify-content: center; }
+  .choice-icon { font-size: 30px; line-height: 1; }
+  .choice-label { font-size: 13px; }
+  .choice-label small { display: block; font-size: 10px; color: var(--muted); font-weight: 400; }
+
   select, textarea, input[type=file] { width: 100%; font-size: 15px; padding: 8px;
          border: 1px solid var(--line); border-radius: 8px; font-family: inherit; }
   #submit { width: 100%; padding: 14px; font-size: 16px; border: 0; border-radius: 10px;
-            background: #1a5c3a; color: #fff; }
+            background: var(--color-accent, #1a5c3a); color: #fff; transition: background .2s ease; }
   #submit:disabled { background: #bbb; }
+  #submit.sent { background: var(--color-ok, #161); }
   .status { font-size: 13px; color: var(--muted); margin: 6px 0 0; }
   .warn { color: var(--warn); }
   .ok { color: var(--ok); }
@@ -69,75 +102,113 @@
 </style>
 <body>
 
-<p class="status" style="margin:0 0 8px"><a href="/">← トップに戻る</a></p>
-<h1>クビアカツヤカミキリ 通報</h1>
-<p class="lead">サクラ・ウメ・モモ・スモモなどの木で見つけたものを報告してください。
-  <a href="mypage.html">マイページ</a></p>
+<div id="topbar">
+  <a href="/">← モリノミカタに戻る</a>
+  <div id="buddy-badge"><span id="buddy-emoji">🥚</span><span id="buddy-level">Lv.1</span></div>
+</div>
+<h1>ヨソモンを記録する</h1>
+<p class="lead">サクラ・ウメ・モモ・スモモなどの木で見つけた外来種「ヨソモン(クビアカツヤカミキリ)」の
+  証拠を教えてください。相棒(キツツキ)のごはんになります。<a href="mypage.html">マイページ</a></p>
 
-<fieldset>
-  <legend>1. 何を見つけましたか</legend>
-  <div class="choices" id="finding">
-    <label><input type="radio" name="finding" value="frass">フラス(木くず状のフン)</label>
-    <label><input type="radio" name="finding" value="adult_alive">成虫(生きている)</label>
-    <label><input type="radio" name="finding" value="adult_dead">成虫(死んでいる)</label>
-    <label><input type="radio" name="finding" value="exit_hole">脱出孔</label>
-    <label><input type="radio" name="finding" value="none">見たが異常なし</label>
+<div id="progress-bar"><div id="progress-fill" style="width:20%"></div></div>
+<p id="step-label">Step 1 / 5</p>
+
+<div class="step" data-step="1">
+  <fieldset>
+    <legend>1. 写真(幹の根元が写るように)</legend>
+    <input id="file" type="file" accept="image/*" capture="environment">
+    <p class="status" id="img-status">未選択</p>
+    <div id="preview"></div>
+  </fieldset>
+  <div class="step-nav">
+    <button type="button" class="next-btn" data-next="2" disabled>つぎへ</button>
   </div>
-  <div id="alive-notice" class="notice" hidden>
-    <strong>成虫を生きたまま持ち運ぶことは法律で禁止されています。</strong>
-    特定外来生物のため、その場で処分してください。
-  </div>
-  <p class="status" id="none-hint" hidden>
-    「異常なし」も貴重なデータです。どの木を調べたかが分かるよう、幹の根元を撮影してください。
-  </p>
-</fieldset>
+</div>
 
-<fieldset>
-  <legend>2. 木の種類</legend>
-  <select id="species">
-    <option value="unknown">わからない</option>
-    <option value="sakura">サクラ</option>
-    <option value="ume">ウメ</option>
-    <option value="momo">モモ</option>
-    <option value="sumomo">スモモ</option>
-    <option value="other_rosaceae">その他のバラ科</option>
-    <option value="non_rosaceae">バラ科以外</option>
-  </select>
-</fieldset>
-
-<fieldset>
-  <legend>3. 写真(幹の根元が写るように)</legend>
-  <input id="file" type="file" accept="image/*" capture="environment">
-  <p class="status" id="img-status">未選択</p>
-  <div id="preview"></div>
-</fieldset>
-
-<fieldset>
-  <legend>4. 位置情報</legend>
-  <p class="status" id="loc-status">写真を選ぶと自動で取得します。</p>
-  <table id="loc-detail"></table>
-  <p class="status" id="map-toggle-p"><a href="#" id="map-toggle">地図で場所を指定する</a></p>
-  <div id="map-fallback" hidden>
-    <div id="map"></div>
-    <button id="map-confirm" type="button" disabled>この位置に決定</button>
-  </div>
-  <div id="nearby-notice" class="info-notice" hidden>
-    <p style="margin:0">近くで最近、別の方から報告がありました。同じ発見の可能性があります。</p>
-    <div class="row">
-      <button id="nearby-yes" type="button">はい、私も見ました</button>
-      <button id="nearby-dismiss" type="button">いいえ、違います</button>
+<div class="step" data-step="2" hidden>
+  <fieldset>
+    <legend>2. 何を見つけましたか</legend>
+    <div class="choices icon-choices" id="finding">
+      <label><input type="radio" name="finding" value="frass">
+        <span class="choice-icon">🪵</span><span class="choice-label">フラス<small>木くず状のフン</small></span></label>
+      <label><input type="radio" name="finding" value="adult_alive">
+        <span class="choice-icon">🐛</span><span class="choice-label">成虫<small>生きている</small></span></label>
+      <label><input type="radio" name="finding" value="adult_dead">
+        <span class="choice-icon">💀</span><span class="choice-label">成虫<small>死んでいる</small></span></label>
+      <label><input type="radio" name="finding" value="exit_hole">
+        <span class="choice-icon">🕳️</span><span class="choice-label">脱出孔</small></span></label>
+      <label><input type="radio" name="finding" value="none">
+        <span class="choice-icon">✅</span><span class="choice-label">見たが<small>異常なし</small></span></label>
     </div>
-    <p class="status" id="nearby-status"></p>
+    <div id="alive-notice" class="notice" hidden>
+      <strong>成虫を生きたまま持ち運ぶことは法律で禁止されています。</strong>
+      特定外来生物のため、その場で処分してください。
+    </div>
+    <p class="status" id="none-hint" hidden>
+      「異常なし」も貴重なデータです。どの木を調べたかが分かるよう、幹の根元を撮影してください。
+    </p>
+  </fieldset>
+  <div class="step-nav">
+    <button type="button" class="back-btn" data-back="1">もどる</button>
+    <button type="button" class="next-btn" data-next="3" disabled>つぎへ</button>
   </div>
-</fieldset>
+</div>
 
-<fieldset>
-  <legend>5. メモ(任意)</legend>
-  <textarea id="note" rows="2" maxlength="500" placeholder="場所の目印など"></textarea>
-</fieldset>
+<div class="step" data-step="3" hidden>
+  <fieldset>
+    <legend>3. 木の種類</legend>
+    <select id="species">
+      <option value="unknown">わからない</option>
+      <option value="sakura">サクラ</option>
+      <option value="ume">ウメ</option>
+      <option value="momo">モモ</option>
+      <option value="sumomo">スモモ</option>
+      <option value="other_rosaceae">その他のバラ科</option>
+      <option value="non_rosaceae">バラ科以外</option>
+    </select>
+  </fieldset>
+  <div class="step-nav">
+    <button type="button" class="back-btn" data-back="2">もどる</button>
+    <button type="button" class="next-btn" data-next="4">つぎへ</button>
+  </div>
+</div>
 
-<button id="submit" disabled>送信する</button>
-<p class="status" id="submit-status"></p>
+<div class="step" data-step="4" hidden>
+  <fieldset>
+    <legend>4. 位置情報</legend>
+    <p class="status" id="loc-status">写真を選ぶと自動で取得します。</p>
+    <table id="loc-detail"></table>
+    <p class="status" id="map-toggle-p"><a href="#" id="map-toggle">地図で場所を指定する</a></p>
+    <div id="map-fallback" hidden>
+      <div id="map"></div>
+      <button id="map-confirm" type="button" disabled>この位置に決定</button>
+    </div>
+    <div id="nearby-notice" class="info-notice" hidden>
+      <p style="margin:0">近くで最近、別の方から報告がありました。同じ発見の可能性があります。</p>
+      <div class="row">
+        <button id="nearby-yes" type="button">はい、私も見ました</button>
+        <button id="nearby-dismiss" type="button">いいえ、違います</button>
+      </div>
+      <p class="status" id="nearby-status"></p>
+    </div>
+  </fieldset>
+  <div class="step-nav">
+    <button type="button" class="back-btn" data-back="3">もどる</button>
+    <button type="button" class="next-btn" data-next="5" disabled>つぎへ</button>
+  </div>
+</div>
+
+<div class="step" data-step="5" hidden>
+  <fieldset>
+    <legend>5. メモ(任意)</legend>
+    <textarea id="note" rows="2" maxlength="500" placeholder="場所の目印など"></textarea>
+  </fieldset>
+  <button id="submit" disabled>送信する</button>
+  <p class="status" id="submit-status"></p>
+  <div class="step-nav">
+    <button type="button" class="back-btn" data-back="4">もどる</button>
+  </div>
+</div>
 
 <div id="done-modal" class="modal-backdrop" hidden>
   <div class="modal-card">
@@ -145,7 +216,7 @@
     <p class="done-title">通報しました!</p>
     <p class="done-desc" id="done-desc">ご協力ありがとうございます!</p>
     <div class="done-links">
-      <a href="/">ヨソモンを見る</a>
+      <a href="/">モリノミカタを見る</a>
       <a href="map.html">被害マップを見る</a>
       <a href="mypage.html">マイページを見る</a>
     </div>
@@ -181,10 +252,48 @@ let lastRejected = null; // AI却下(auto_rejected)になった直近の通報�
 function doneDescText(character) {
   if (!character) return 'ご協力ありがとうございます!';
   if (character.leveled_up) {
-    return `🎉 レベルアップ!ヨソモンが Lv.${character.level} になりました(+${character.xp_gained} XP)`;
+    return `🎉 レベルアップ!相棒が Lv.${character.level} になりました(+${character.xp_gained} XP)`;
   }
-  return `ご協力ありがとうございます!ヨソモンが育ちました(+${character.xp_gained} XP, Lv.${character.level})`;
+  return `ご協力ありがとうございます!相棒が育ちました(+${character.xp_gained} XP, Lv.${character.level})`;
 }
+
+// --- 相棒バッジ(常駐。本物のアート素材が無いための暫定ビジュアル) -----------
+const LEVEL_SPRITES = [
+  { min: 1, max: 2, emoji: '🥚' },
+  { min: 3, max: 5, emoji: '🐣' },
+  { min: 6, max: 9, emoji: '🐦' },
+  { min: 10, max: Infinity, emoji: '🦅' },
+];
+function spriteForLevel(level) {
+  return (LEVEL_SPRITES.find((s) => level >= s.min && level <= s.max) || LEVEL_SPRITES[0]).emoji;
+}
+async function loadBuddyBadge() {
+  try {
+    const res = await fetch(`/api/character?reporter_id=${reporterId}`);
+    const j = await res.json();
+    if (j.ok) {
+      $('buddy-emoji').textContent = spriteForLevel(j.level);
+      $('buddy-level').textContent = `Lv.${j.level}`;
+    }
+  } catch { /* バッジ表示だけなので失敗しても致命的ではない */ }
+}
+
+// --- ステップウィザード(既存の入力ロジックは一切変更せず、見た目の並び方だけを変える) ---
+const TOTAL_STEPS = 5;
+function showStep(n) {
+  document.querySelectorAll('.step').forEach((el) => {
+    el.hidden = Number(el.dataset.step) !== n;
+  });
+  $('step-label').textContent = `Step ${n} / ${TOTAL_STEPS}`;
+  $('progress-fill').style.width = `${(n / TOTAL_STEPS) * 100}%`;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+document.querySelectorAll('.next-btn').forEach((btn) => {
+  btn.addEventListener('click', () => showStep(Number(btn.dataset.next)));
+});
+document.querySelectorAll('.back-btn').forEach((btn) => {
+  btn.addEventListener('click', () => showStep(Number(btn.dataset.back)));
+});
 
 // --- 位置情報 ---------------------------------------------------------
 function getPosition() {
@@ -419,6 +528,11 @@ $('map-confirm').addEventListener('click', () => {
 function refresh() {
   const f = document.querySelector('input[name=finding]:checked');
   $('submit').disabled = !(f && state.full && state.point);
+  // ステップ送りボタンの有効/無効。判定そのものは上の submit の可否判定と同じ状態を見ているだけで、
+  // 新しいロジックは足していない。
+  document.querySelector('.step[data-step="1"] .next-btn').disabled = !state.full;
+  document.querySelector('.step[data-step="2"] .next-btn').disabled = !f;
+  document.querySelector('.step[data-step="4"] .next-btn').disabled = !state.point;
 }
 
 // --- 送信 -------------------------------------------------------------
@@ -462,10 +576,12 @@ $('submit').addEventListener('click', async () => {
       $('submit-status').innerHTML =
         `<span class="ok">送信しました。ありがとうございます。</span><br>` +
         `受付番号 <span class="mono">${j.id.slice(0, 8)}</span> / ${j.points} ポイント獲得` +
-        (j.character ? ` / ヨソモン +${j.character.xp_gained} XP` : '');
+        (j.character ? ` / 相棒 +${j.character.xp_gained} XP` : '');
       $('done-desc').textContent = doneDescText(j.character);
-      $('submit').textContent = '送信済み';
+      $('submit').innerHTML = '✅ 送信済み';
+      $('submit').classList.add('sent');
       $('done-modal').hidden = false;
+      loadBuddyBadge();
     }
   } catch (e) {
     $('submit-status').innerHTML = `<span class="warn">${e.message}</span>`;
@@ -503,7 +619,7 @@ $('reject-retake').addEventListener('click', (e) => {
   $('preview').innerHTML = '';
   $('submit-status').textContent = '';
   refresh();
-  $('file').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  showStep(1);
   // ユーザー操作(このクリック)の直後・同期的な呼び出しなので、iOS Safari 等でも
   // ブロックされずファイル選択(カメラ起動)がそのまま開く。
   $('file').click();
@@ -526,17 +642,22 @@ $('reject-force').addEventListener('click', async () => {
     $('submit-status').innerHTML =
       `<span class="ok">送信しました。ありがとうございます。</span><br>` +
       `受付番号 <span class="mono">${id.slice(0, 8)}</span> / ${j.points} ポイント獲得` +
-      (j.character ? ` / ヨソモン +${j.character.xp_gained} XP` : '');
+      (j.character ? ` / 相棒 +${j.character.xp_gained} XP` : '');
     $('done-desc').textContent = doneDescText(j.character);
-    $('submit').textContent = '送信済み';
+    $('submit').innerHTML = '✅ 送信済み';
+    $('submit').classList.add('sent');
     $('submit').disabled = true;
     $('done-modal').hidden = false;
     lastRejected = null;
+    loadBuddyBadge();
   } catch (e) {
     $('reject-force-msg').innerHTML = `<span class="warn">${e.message}</span>`;
     $('reject-force').disabled = false;
   }
 });
+
+showStep(1);
+authReady.then(() => { loadBuddyBadge(); });
 </script>
 </body>
 </html>

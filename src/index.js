@@ -40,6 +40,7 @@ const TRIAGE_PROMPT = `あなたは市民が投稿した樹木被害通報アプ
 // 完全に別経済(rule3の「投稿の正確性」に紐づく既存ポイントの意味を壊さないため)。
 const XP_PER_VOTE = 2;
 const XP_PER_REPORT = 5;
+const XP_CONFIRM_BONUS = 15; // 「量でなく正しさ」— 投稿時の3倍、レビュアーが被害ありと確定した時のみ
 const VOTE_HOURLY_LIMIT = 60;
 const VOTE_CHOICES = new Set(["tree", "evidence", "irrelevant"]);
 function resolveVoteChoice(choice) {
@@ -257,15 +258,25 @@ async function createReport(request, env) {
   // メッシュコードは必ずサーバ側で再計算する
   const mesh = meshCodes(lat, lng);
 
-  const rate = await env.DB.prepare(
-    "SELECT COUNT(*) AS n FROM reports WHERE reporter_id = ?1 AND created_at > unixepoch() - 3600"
-  ).bind(reporterId).first();
-  if ((rate?.n ?? 0) >= HOURLY_LIMIT) {
+  const now = Math.floor(Date.now() / 1000);
+
+  // レート制限・スパム抑止(同一メッシュへの直近投稿)・定点観測ストリークの現在値を
+  // 1往復でまとめて読む(batch実行より前に済ませる。batch内に後置すると今回作成する
+  // 行自体を数えてしまいカウントがずれるため)。
+  const state = await env.DB.prepare(
+    `SELECT
+       (SELECT COUNT(*) FROM reports WHERE reporter_id=?1 AND created_at > ?2 - 3600) AS hourly,
+       (SELECT COUNT(*) FROM reports WHERE reporter_id=?1 AND mesh5=?3
+          AND created_at > ?2 - 3600) AS mesh_recent,
+       (SELECT streak_mesh5 FROM reporters WHERE id=?1) AS streak_mesh5,
+       (SELECT streak_count FROM reporters WHERE id=?1) AS streak_count,
+       (SELECT streak_at FROM reporters WHERE id=?1) AS streak_at`
+  ).bind(reporterId, now, mesh.mesh5).first();
+  if ((state?.hourly ?? 0) >= HOURLY_LIMIT) {
     return bad("短時間の送信が多すぎます。しばらく待ってから再度お試しください", 429);
   }
 
   const id = crypto.randomUUID();
-  const now = Math.floor(Date.now() / 1000);
   const d = new Date(now * 1000);
   const prefix = `r/${d.getUTCFullYear()}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${id}`;
   const imageKey = `${prefix}/full.jpg`;
@@ -292,6 +303,19 @@ async function createReport(request, env) {
   // 対象ではない、というシンプルな割り切り。
   const points = ai.status === "auto_rejected" ? 0 : (finding === "none" ? 2 : 1);
   const kind = finding === "none" ? "negative_survey" : "submit";
+
+  // スパム抑止: 直近1時間に自分が同じ250mメッシュへ投稿していれば今回のXPを割り引く
+  // (auto_rejectedかどうかは問わずカウントする=本物とゴミを交互に送って抑止を回避
+  // させないため)。
+  const baseReportXp = (state?.mesh_recent ?? 0) > 0
+    ? Math.max(1, Math.floor(XP_PER_REPORT / 2)) : XP_PER_REPORT;
+
+  // 定点観測ストリーク: 同じ地点(mesh5)に20時間〜14日以内で再訪していれば継続、
+  // それ以外(新規地点 or 期限切れ)は1にリセット。
+  const withinStreakWindow = state?.streak_mesh5 === mesh.mesh5 && state?.streak_at != null &&
+    (now - state.streak_at) >= 72000 && (now - state.streak_at) <= 1209600;
+  const newStreakCount = withinStreakWindow ? (state?.streak_count ?? 0) + 1 : 1;
+  const reportXp = baseReportXp + Math.min(newStreakCount, 5);
 
   const stmts = [
     env.DB.prepare(
@@ -331,17 +355,25 @@ async function createReport(request, env) {
       // 通報は一意なイベントで二重送信の衝突を気にする必要がないため、
       // triageVote のような changes() チェーンは不要。xp_total は相対更新のみ行い、
       // レベル(非線形カーブ)は batch 後に JS 側でまとめて計算する。
+      // ストリークボーナスは独立の kind を作らず report_submit の amount に合算する
+      // (reviewDecide の revoke 時に「この通報で付与した合計XP」を1回のSUMで正確に
+      // 取り消せるようにするため)。
       env.DB.prepare(
         `INSERT INTO xp_events (reporter_id, report_id, kind, amount, created_at)
          VALUES (?1,?2,'report_submit',?3,?4)`
-      ).bind(reporterId, id, XP_PER_REPORT, now),
+      ).bind(reporterId, id, reportXp, now),
       env.DB.prepare(
         `INSERT INTO characters (reporter_id, xp_total, level, created_at, updated_at)
          VALUES (?1,?2,1,?3,?3)
          ON CONFLICT (reporter_id) DO UPDATE SET
            xp_total = characters.xp_total + ?2,
            updated_at = ?3`
-      ).bind(reporterId, XP_PER_REPORT, now),
+      ).bind(reporterId, reportXp, now),
+      // 定点観測ストリーク。値は上でJS側で計算済みなので、そのまま絶対値として書き込む。
+      env.DB.prepare(
+        `UPDATE reporters SET streak_mesh5 = ?2, streak_count = ?3, streak_at = ?4
+          WHERE id = ?1`
+      ).bind(reporterId, mesh.mesh5, newStreakCount, now),
     );
   }
   await env.DB.batch(stmts);
@@ -351,9 +383,9 @@ async function createReport(request, env) {
     const char = await env.DB.prepare(
       "SELECT xp_total FROM characters WHERE reporter_id = ?1"
     ).bind(reporterId).first();
-    const after = characterProgress(char?.xp_total ?? XP_PER_REPORT);
-    const before = characterProgress(after.xp_total - XP_PER_REPORT);
-    character = { ...after, xp_gained: XP_PER_REPORT, leveled_up: after.level > before.level };
+    const after = characterProgress(char?.xp_total ?? reportXp);
+    const before = characterProgress(after.xp_total - reportXp);
+    character = { ...after, xp_gained: reportXp, leveled_up: after.level > before.level };
   }
 
   return Response.json({
@@ -423,11 +455,16 @@ async function reviewDecide(request, env, reviewer) {
   const duplicateOf = body.duplicate_of ? String(body.duplicate_of) : null;
 
   const row = await env.DB.prepare(
-    "SELECT reporter_id, finding, status FROM reports WHERE id = ?1"
+    `SELECT reporter_id, finding, status,
+            (SELECT COALESCE(SUM(amount), 0) FROM xp_events
+              WHERE report_id = ?1 AND kind = 'report_submit') AS submit_xp
+       FROM reports WHERE id = ?1`
   ).bind(id).first();
   if (!row) return bad("該当する通報がありません", 404);
-  if (["confirmed", "rejected", "duplicate"].includes(row.status)) {
-    return bad("この通報はすでに判定済みです", 409);
+  // pending_review/provisional以外(確定済み三種に加え、auto_rejectedを直接叩かれるケースも
+  // 含めて)は弾く。今回XP処理を新たに足すので、既存の緩いガードを合わせて締める。
+  if (!["pending_review", "provisional"].includes(row.status)) {
+    return bad("この通報はレビュー待ちではありません", 409);
   }
 
   const now = Math.floor(Date.now() / 1000);
@@ -452,6 +489,19 @@ async function reviewDecide(request, env, reviewer) {
       `INSERT INTO point_events (reporter_id, report_id, kind, points, created_at)
        VALUES (?1,?2,'confirm_bonus',?3,?4)`
     ).bind(row.reporter_id, id, bonus, now));
+    // キャラ育成ゲームのXP側も「正しさ」に大きく報いる(point_eventsとは別経済)。
+    // characters行が無いreporterもいるためON CONFLICT形式で作成もカバーする。
+    stmts.push(env.DB.prepare(
+      `INSERT INTO xp_events (reporter_id, report_id, kind, amount, created_at)
+       VALUES (?1,?2,'confirm_bonus',?3,?4)`
+    ).bind(row.reporter_id, id, XP_CONFIRM_BONUS, now));
+    stmts.push(env.DB.prepare(
+      `INSERT INTO characters (reporter_id, xp_total, level, created_at, updated_at)
+       VALUES (?1,?2,1,?3,?3)
+       ON CONFLICT (reporter_id) DO UPDATE SET
+         xp_total = characters.xp_total + ?2,
+         updated_at = ?3`
+    ).bind(row.reporter_id, XP_CONFIRM_BONUS, now));
   } else if (decision === "rejected") {
     bonus = -1;
     rejectedDelta = 1;
@@ -459,6 +509,18 @@ async function reviewDecide(request, env, reviewer) {
       `INSERT INTO point_events (reporter_id, report_id, kind, points, created_at, note)
        VALUES (?1,?2,'revoke',-1,?3,'誤報のため取り消し')`
     ).bind(row.reporter_id, id, now));
+    // 投稿時に付与したXP(通常額・スパム割引・ストリークボーナス込みの実額)を取り消す。
+    // 固定値ではなくxp_eventsから実際に付与された合計を引く(point_eventsのrevokeが
+    // 固定-1点なのは点数側が元々1〜2点しか無いから成立する簡略化で、XPには使えない)。
+    if (row.submit_xp > 0) {
+      stmts.push(env.DB.prepare(
+        `INSERT INTO xp_events (reporter_id, report_id, kind, amount, created_at)
+         VALUES (?1,?2,'revoke',?3,?4)`
+      ).bind(row.reporter_id, id, -row.submit_xp, now));
+      stmts.push(env.DB.prepare(
+        `UPDATE characters SET xp_total = MAX(0, xp_total - ?2) WHERE reporter_id = ?1`
+      ).bind(row.reporter_id, row.submit_xp));
+    }
   } else {
     stmts.push(env.DB.prepare(
       `INSERT INTO point_events (reporter_id, report_id, kind, points, created_at, note)
@@ -734,12 +796,13 @@ async function mypage(request, env) {
 
   const [summary, reportsRes, eventsRes] = await Promise.all([
     env.DB.prepare(
-      `SELECT points_total, submitted_count, confirmed_count, rejected_count
+      `SELECT points_total, submitted_count, confirmed_count, rejected_count,
+              trust_score, streak_count
          FROM reporters WHERE id = ?1`
     ).bind(reporterId).first(),
     env.DB.prepare(
       `SELECT id, created_at, observed_at, finding, tree_species, note, status,
-              land_type, response_status, response_note, thumb_key
+              land_type, response_status, response_note, response_updated_at, thumb_key
          FROM reports
         WHERE reporter_id = ?1
         ORDER BY created_at DESC
@@ -756,8 +819,14 @@ async function mypage(request, env) {
 
   return Response.json({
     ok: true,
-    summary: summary ?? {
-      points_total: 0, submitted_count: 0, confirmed_count: 0, rejected_count: 0,
+    summary: {
+      points_total: summary?.points_total ?? 0,
+      submitted_count: summary?.submitted_count ?? 0,
+      confirmed_count: summary?.confirmed_count ?? 0,
+      rejected_count: summary?.rejected_count ?? 0,
+      trust_score: summary?.trust_score ?? 0.5,
+      hunter_rank: hunterRank(summary?.trust_score, summary?.submitted_count),
+      streak_count: summary?.streak_count ?? 0,
     },
     reports: reportsRes.results,
     point_events: eventsRes.results,
@@ -929,16 +998,251 @@ function characterProgress(xpTotal) {
   };
 }
 
+// ハンターランク: 既存の trust_score(確定率のラプラス平滑化)をそのまま流用し、
+// 新規計算ロジックは持たない。経験(submitted_count)も条件に含めることで、
+// 少数サンプルでの偶然の高trust_scoreだけで最上位ランクに届かないようにする。
+const HUNTER_RANKS = [
+  { rank: "エキスパート", minTrust: 0.85, minSubmitted: 30 },
+  { rank: "ベテラン", minTrust: 0.75, minSubmitted: 15 },
+  { rank: "一人前", minTrust: 0.6, minSubmitted: 5 },
+  { rank: "見習い", minTrust: 0, minSubmitted: 0 },
+];
+function hunterRank(trustScore, submittedCount) {
+  const t = trustScore ?? 0.5, n = submittedCount ?? 0;
+  return HUNTER_RANKS.find((r) => t >= r.minTrust && n >= r.minSubmitted)?.rank ?? "見習い";
+}
+
 async function getCharacter(request, env) {
   const url = new URL(request.url);
   const reporterId = String(url.searchParams.get("reporter_id") || "");
   if (!UUID_RE.test(reporterId)) return bad("通報者IDが不正です");
 
-  const row = await env.DB.prepare(
+  const [char, rp] = await Promise.all([
+    env.DB.prepare("SELECT xp_total FROM characters WHERE reporter_id = ?1").bind(reporterId).first(),
+    env.DB.prepare(
+      "SELECT trust_score, submitted_count, streak_count FROM reporters WHERE id = ?1"
+    ).bind(reporterId).first(),
+  ]);
+
+  return Response.json({
+    ok: true, ...characterProgress(char?.xp_total ?? 0),
+    trust_score: rp?.trust_score ?? 0.5,
+    hunter_rank: hunterRank(rp?.trust_score, rp?.submitted_count),
+    streak_count: rp?.streak_count ?? 0,
+  });
+}
+
+// =====================================================================
+// 図鑑(ヨソモン図鑑)
+//   reports から直接集計するだけで、新規テーブルは持たない。
+//   status='auto_rejected'(AIが明確に無関係と判定)は収集対象から除外する
+//   ——除外しないと、ゴミ写真を樹種違いで投げるだけで埋められてしまい
+//   rule3の「水増しを構造で防ぐ」に反するため。
+// =====================================================================
+const ZUKAN_FINDINGS = ["frass", "adult_alive", "adult_dead", "exit_hole"];
+const ZUKAN_SPECIES = ["sakura", "ume", "momo", "sumomo", "other_rosaceae"];
+
+async function getEncyclopedia(request, env) {
+  const url = new URL(request.url);
+  const reporterId = String(url.searchParams.get("reporter_id") || "");
+  if (!UUID_RE.test(reporterId)) return bad("通報者IDが不正です");
+
+  const { results } = await env.DB.prepare(
+    `SELECT DISTINCT finding, tree_species FROM reports
+      WHERE reporter_id = ?1 AND status <> 'auto_rejected'
+        AND finding IN ('frass','adult_alive','adult_dead','exit_hole')
+        AND tree_species IN ('sakura','ume','momo','sumomo','other_rosaceae')`
+  ).bind(reporterId).all();
+
+  const filled = new Set(results.map((r) => `${r.finding}:${r.tree_species}`));
+  return Response.json({
+    ok: true, total: ZUKAN_FINDINGS.length * ZUKAN_SPECIES.length, count: filled.size,
+    slots: ZUKAN_FINDINGS.flatMap((f) => ZUKAN_SPECIES.map((s) => ({
+      finding: f, tree_species: s, filled: filled.has(`${f}:${s}`),
+    }))),
+  });
+}
+
+// =====================================================================
+// クエスト
+//   キュレーションされた固定コンテンツなのでDB駆動にせずコード内定義とする。
+//   達成状態はクライアントを信用せず毎回サーバ側の実データから再判定する。
+//   受け取り済みフラグだけ quest_claims に持ち、二重受給を防ぐ。
+// =====================================================================
+const QUESTS = [
+  {
+    id: "first_report", title: "はじめての記録",
+    desc: "ヨソモンの証拠を1件記録しよう", reward: 5, seasonal: null,
+    check: async (env, reporterId) => {
+      const r = await env.DB.prepare(
+        "SELECT COUNT(*) AS n FROM reports WHERE reporter_id=?1 AND status <> 'auto_rejected'"
+      ).bind(reporterId).first();
+      return (r?.n ?? 0) >= 1;
+    },
+  },
+  {
+    id: "three_species", title: "3樹種チャレンジ",
+    desc: "異なる3種類の樹種でヨソモンを記録しよう", reward: 10, seasonal: null,
+    check: async (env, reporterId) => {
+      const r = await env.DB.prepare(
+        `SELECT COUNT(DISTINCT tree_species) AS n FROM reports
+          WHERE reporter_id=?1 AND status <> 'auto_rejected' AND tree_species <> 'unknown'`
+      ).bind(reporterId).first();
+      return (r?.n ?? 0) >= 3;
+    },
+  },
+  {
+    id: "triage_master", title: "判定マイスター",
+    desc: "写真判定(トリアージ)を10回行おう", reward: 10, seasonal: null,
+    check: async (env, reporterId) => {
+      const r = await env.DB.prepare(
+        "SELECT COUNT(*) AS n FROM triage_votes WHERE voter_id=?1"
+      ).bind(reporterId).first();
+      return (r?.n ?? 0) >= 10;
+    },
+  },
+  {
+    id: "summer_adult_patrol", title: "夏の成虫パトロール",
+    desc: "6〜8月に成虫を見つけて記録しよう(クビアカツヤカミキリの発生期)",
+    reward: 10, seasonal: { startMonth: 6, endMonth: 8 },
+    check: async (env, reporterId) => {
+      const r = await env.DB.prepare(
+        `SELECT COUNT(*) AS n FROM reports
+          WHERE reporter_id=?1 AND status <> 'auto_rejected'
+            AND finding IN ('adult_alive','adult_dead')
+            AND CAST(strftime('%m', COALESCE(observed_at, created_at), 'unixepoch') AS INTEGER)
+                BETWEEN 6 AND 8`
+      ).bind(reporterId).first();
+      return (r?.n ?? 0) >= 1;
+    },
+  },
+  {
+    id: "zukan_complete", title: "図鑑コンプリート",
+    desc: "図鑑を20枠すべて埋めよう", reward: 20, seasonal: null,
+    check: async (env, reporterId) => {
+      const { results } = await env.DB.prepare(
+        `SELECT DISTINCT finding, tree_species FROM reports
+          WHERE reporter_id=?1 AND status <> 'auto_rejected'
+            AND finding IN ('frass','adult_alive','adult_dead','exit_hole')
+            AND tree_species IN ('sakura','ume','momo','sumomo','other_rosaceae')`
+      ).bind(reporterId).all();
+      return new Set(results.map((r) => `${r.finding}:${r.tree_species}`)).size >= 20;
+    },
+  },
+];
+
+function currentMonth() {
+  return new Date().getUTCMonth() + 1;
+}
+
+async function getQuests(request, env) {
+  const url = new URL(request.url);
+  const reporterId = String(url.searchParams.get("reporter_id") || "");
+  if (!UUID_RE.test(reporterId)) return bad("通報者IDが不正です");
+
+  const month = currentMonth();
+  const { results: claimedRows } = await env.DB.prepare(
+    "SELECT quest_id FROM quest_claims WHERE reporter_id = ?1"
+  ).bind(reporterId).all();
+  const claimed = new Set(claimedRows.map((r) => r.quest_id));
+
+  const quests = await Promise.all(QUESTS.map(async (q) => ({
+    id: q.id, title: q.title, desc: q.desc, reward: q.reward,
+    seasonal: !!q.seasonal,
+    active: !q.seasonal || (month >= q.seasonal.startMonth && month <= q.seasonal.endMonth),
+    achieved: await q.check(env, reporterId),
+    claimed: claimed.has(q.id),
+  })));
+
+  return Response.json({ ok: true, quests });
+}
+
+async function claimQuest(request, env) {
+  const body = await request.json();
+  const reporterId = String(body.reporter_id || "");
+  if (!UUID_RE.test(reporterId)) return bad("通報者IDが不正です");
+  const quest = QUESTS.find((q) => q.id === String(body.quest_id || ""));
+  if (!quest) return bad("クエストの指定が不正です");
+
+  if (quest.seasonal) {
+    const month = currentMonth();
+    if (month < quest.seasonal.startMonth || month > quest.seasonal.endMonth) {
+      return bad("このクエストは現在の期間では受け取れません");
+    }
+  }
+  // クライアントの自己申告を信用せず、サーバ側の実データで再判定する。
+  if (!(await quest.check(env, reporterId))) {
+    return bad("まだ達成条件を満たしていません", 409);
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const results = await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO quest_claims (reporter_id, quest_id, claimed_at) VALUES (?1,?2,?3)
+       ON CONFLICT (reporter_id, quest_id) DO NOTHING`
+    ).bind(reporterId, quest.id, now),
+    env.DB.prepare(
+      `INSERT INTO xp_events (reporter_id, report_id, kind, amount, created_at)
+       SELECT ?1, NULL, 'quest_bonus', ?2, ?3 WHERE changes() = 1`
+    ).bind(reporterId, quest.reward, now),
+    env.DB.prepare(
+      `INSERT INTO characters (reporter_id, xp_total, level, created_at, updated_at)
+       SELECT ?1, ?2, 1, ?3, ?3 WHERE changes() = 1
+       ON CONFLICT (reporter_id) DO UPDATE SET
+         xp_total = characters.xp_total + ?2, updated_at = ?3`
+    ).bind(reporterId, quest.reward, now),
+  ]);
+  const awarded = results[0].meta.changes > 0;
+
+  const char = await env.DB.prepare(
     "SELECT xp_total FROM characters WHERE reporter_id = ?1"
   ).bind(reporterId).first();
+  const after = characterProgress(char?.xp_total ?? 0);
+  const before = awarded ? characterProgress(after.xp_total - quest.reward) : after;
 
-  return Response.json({ ok: true, ...characterProgress(row?.xp_total ?? 0) });
+  return Response.json({
+    ok: true, awarded, leveled_up: awarded && after.level > before.level, ...after,
+  });
+}
+
+// =====================================================================
+// 地域インパクト・ローカルランキング
+//   自治体境界データが無い(survey_meshは未整備)ため、mesh3(約1km四方)を
+//   「地域」の代用単位とする(未調査エリア表示と同じ代用指標パターン)。
+//   ランキングは他人の識別情報を一切返さず、自分の順位/総人数のみ返す(rule1に抵触しない)。
+// =====================================================================
+async function getImpact(request, env) {
+  const url = new URL(request.url);
+  const reporterId = String(url.searchParams.get("reporter_id") || "");
+  if (!UUID_RE.test(reporterId)) return bad("通報者IDが不正です");
+
+  const latest = await env.DB.prepare(
+    "SELECT mesh3 FROM reports WHERE reporter_id = ?1 ORDER BY created_at DESC LIMIT 1"
+  ).bind(reporterId).first();
+  if (!latest) return Response.json({ ok: true, available: false });
+
+  const mesh3 = latest.mesh3;
+  const now = new Date();
+  const monthStart = Math.floor(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1) / 1000);
+
+  const [stats, ranked] = await Promise.all([
+    env.DB.prepare(
+      `SELECT COUNT(*) AS total, SUM(status='confirmed') AS confirmed
+         FROM reports WHERE mesh3=?1 AND status <> 'auto_rejected' AND created_at >= ?2`
+    ).bind(mesh3, monthStart).first(),
+    env.DB.prepare(
+      `SELECT reporter_id FROM reports
+        WHERE mesh3=?1 AND status <> 'auto_rejected' AND created_at >= ?2
+        GROUP BY reporter_id ORDER BY COUNT(*) DESC`
+    ).bind(mesh3, monthStart).all(),
+  ]);
+  const rankIndex = ranked.results.findIndex((r) => r.reporter_id === reporterId);
+
+  return Response.json({
+    ok: true, available: true, mesh3,
+    month_total: stats?.total ?? 0, month_confirmed: stats?.confirmed ?? 0,
+    rank: rankIndex >= 0 ? rankIndex + 1 : null, participants: ranked.results.length,
+  });
 }
 
 async function triageNext(request, env) {
@@ -1268,6 +1572,18 @@ export default {
       }
       if (path === "/api/triage/vote" && request.method === "POST") {
         return await triageVote(request, env);
+      }
+      if (path === "/api/encyclopedia" && request.method === "GET") {
+        return await getEncyclopedia(request, env);
+      }
+      if (path === "/api/quests" && request.method === "GET") {
+        return await getQuests(request, env);
+      }
+      if (path === "/api/quests/claim" && request.method === "POST") {
+        return await claimQuest(request, env);
+      }
+      if (path === "/api/impact" && request.method === "GET") {
+        return await getImpact(request, env);
       }
 
       // --- Google ログイン(任意。ゲストと並行して使える) ---
