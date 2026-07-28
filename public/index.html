@@ -22,23 +22,35 @@
   #char-area { flex: none; min-height: 38vh; display: flex; flex-direction: column;
                align-items: center; justify-content: center; gap: 8px;
                background: linear-gradient(180deg, #eef5f0, #fff); padding: 16px; }
-  #char-sprite { font-size: 88px; line-height: 1; }
+  .char-tap { display: flex; flex-direction: column; align-items: center; gap: 0;
+              text-decoration: none; color: inherit; -webkit-tap-highlight-color: transparent;
+              border-radius: 20px; padding: 6px 18px; }
+  .char-tap:active { background: rgba(26,92,58,.08); }
+  #char-sprite { font-size: 88px; line-height: 1; transition: transform .1s ease; }
+  .char-tap:active #char-sprite { transform: scale(0.92); }
   #char-level { font-size: 18px; font-weight: 700; }
+  .char-hint { font-size: 11px; color: var(--muted); margin-top: 2px; }
   .xp-bar { width: 220px; height: 10px; border-radius: 999px; background: #e3e3df;
-            overflow: hidden; }
+            overflow: hidden; margin-top: 8px; }
   .xp-bar-fill { height: 100%; background: #1a5c3a; border-radius: 999px;
                  transition: width .3s ease; }
   #xp-label { font-size: 12px; color: var(--muted); }
 
-  #action-wrap { flex: none; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
-  .action-btn { display: block; width: 100%; padding: 14px; font-size: 16px; font-weight: 700;
-                color: #fff; border: 0; border-radius: 999px; cursor: pointer;
-                text-decoration: none; text-align: center; }
-  .action-btn.primary { background: #1a5c3a; }
-  .action-btn.primary:active { background: #164a30; }
-  .action-btn.secondary { background: #1a4d73; }
-  .action-btn.secondary:active { background: #163f5e; }
-  #action-desc { font-size: 12px; color: var(--muted); margin: 4px 0 0; text-align: center; }
+  #action-wrap { flex: none; padding: 16px; }
+  .action-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .action-tile { display: flex; flex-direction: column; align-items: center; justify-content: center;
+                 gap: 6px; padding: 16px 6px; min-height: 84px; border-radius: var(--radius-card, 16px);
+                 border: 0; cursor: pointer; text-decoration: none; text-align: center;
+                 font-family: inherit; -webkit-tap-highlight-color: transparent; }
+  .action-tile .action-icon { font-size: 30px; line-height: 1; }
+  .action-tile .action-label { font-size: 11px; font-weight: 600; line-height: 1.3; }
+  .action-tile.primary { background: #1a5c3a; color: #fff; }
+  .action-tile.primary:active { background: #164a30; }
+  .action-tile.secondary { background: #1a4d73; color: #fff; }
+  .action-tile.secondary:active { background: #163f5e; }
+  .action-tile.tertiary { background: #fff; color: #222; border: 1px solid var(--line); }
+  .action-tile.tertiary:active { background: #f4f4f2; }
+  #action-desc { font-size: 12px; color: var(--muted); margin: 10px 0 0; text-align: center; }
 
   #triage-area { flex: 1; display: flex; flex-direction: column; align-items: center;
                  justify-content: center; padding: 16px; gap: 12px; position: relative; }
@@ -71,13 +83,17 @@
   #levelup-title { font-size: 18px; font-weight: 700; margin: 0 0 12px; color: #1a5c3a; }
   #levelup-sprite { font-size: 72px; line-height: 1; margin: 0 0 8px; }
   #levelup-level { font-size: 22px; font-weight: 700; margin: 0 0 20px; }
+  .action-btn { display: block; width: 100%; padding: 14px; font-size: 16px; font-weight: 700;
+                color: #fff; border: 0; border-radius: 999px; cursor: pointer;
+                text-decoration: none; text-align: center; }
+  .action-btn.primary { background: #1a5c3a; }
+  .action-btn.primary:active { background: #164a30; }
+  .action-btn.secondary { background: #1a4d73; }
+  .action-btn.secondary:active { background: #163f5e; }
   #levelup-modal .modal-card .action-btn { margin-top: 8px; }
 
   footer { flex: none; padding: 12px 16px; }
-  footer .note { font-size: 11px; color: var(--muted); margin: 0 0 8px; text-align: center; }
-  footer .menu-link { display: block; text-align: center; font-size: 12px; color: var(--muted);
-                       text-decoration: none; }
-  footer .menu-link:hover { color: #222; }
+  footer .note { font-size: 11px; color: var(--muted); margin: 0; text-align: center; }
 </style>
 <body>
 
@@ -88,15 +104,30 @@
 </div>
 
 <section id="char-area">
-  <div id="char-sprite">🥚</div>
-  <div id="char-level">Lv.1</div>
+  <a id="char-link" href="mypage.html" class="char-tap">
+    <div id="char-sprite">🥚</div>
+    <div id="char-level">Lv.1</div>
+  </a>
+  <p class="char-hint">タップしてマイページへ</p>
   <div class="xp-bar"><div class="xp-bar-fill" id="xp-fill" style="width:0%"></div></div>
   <div id="xp-label">0 / 20 XP</div>
 </section>
 
 <div id="action-wrap">
-  <a href="report.html" class="action-btn primary">📷 ヨソモンを記録する</a>
-  <button type="button" id="start-btn" class="action-btn secondary">🔍 写真を判定する</button>
+  <div class="action-grid">
+    <a href="report.html" class="action-tile primary">
+      <span class="action-icon">📷</span>
+      <span class="action-label">ヨソモンを<br>記録する</span>
+    </a>
+    <button type="button" id="start-btn" class="action-tile secondary">
+      <span class="action-icon">🔍</span>
+      <span class="action-label">写真を<br>判定する</span>
+    </button>
+    <a href="map.html" class="action-tile tertiary">
+      <span class="action-icon">🗺️</span>
+      <span class="action-label">出現情報</span>
+    </a>
+  </div>
   <p id="action-desc">外来種「ヨソモン」を見つけて記録すると、相棒のキツツキが育ちます</p>
 </div>
 
@@ -118,7 +149,6 @@
 <footer>
   <p class="note">表示される写真は位置情報・投稿者情報を含まないサムネイルのみです。
     最終判定は自治体の担当者が行います。相棒のビジュアルは仮のものです。</p>
-  <a class="menu-link" href="menu.html">🗺️ 被害マップ・マイページはこちら</a>
 </footer>
 
 <div id="levelup-modal" class="modal-backdrop" hidden>
