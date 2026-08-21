@@ -1,7 +1,7 @@
 {
-  "name": "kubiakareport",
+  "name": "tiuc",
   "version": "1.0.0",
-  "description": "クビアカツヤカミキリの通報ゲームアプリ",
+  "description": "TIUC: Today is under construction. — 街なか外国語表記キュレーションアプリ",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"

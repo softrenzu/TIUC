@@ -1,5 +1,5 @@
 {
-  "name": "kubiaka-report",
+  "name": "tiuc",
   "main": "src/index.js",
   "compatibility_date": "2026-07-01",
   "assets": {
@@ -8,14 +8,14 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "kubiaka-db",
-      "database_id": "16fc5560-fb1f-4502-963b-ab906ad44112"
+      "database_name": "tiuc-db",
+      "database_id": "5768a761-31f1-4295-a4db-19adcac485a5"
     }
   ],
   "r2_buckets": [
     {
       "binding": "PHOTOS",
-      "bucket_name": "kubiaka-photos"
+      "bucket_name": "tiuc-photos"
     }
   ],
   "ai": {
