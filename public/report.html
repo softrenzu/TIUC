@@ -2,7 +2,7 @@
 <html lang="ja">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>記録 - TIUC</title>
+<title>投稿する - TIUC</title>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
 <link rel="stylesheet" href="tokens.css">
 <style>
@@ -13,11 +13,8 @@
 
   #topbar { display: flex; align-items: center; justify-content: space-between; margin: 0 0 8px; }
   #topbar a { font-size: 12px; color: var(--muted); text-decoration: none; }
-  #buddy-badge { display: flex; align-items: center; gap: 4px; font-size: 12px;
-                 border: 1px solid var(--line); border-radius: var(--radius-pill);
-                 padding: 3px 10px 3px 6px; }
-  #buddy-emoji { font-size: 16px; }
-  #buddy-level { font-weight: 700; }
+  #points-badge { font-size: 12px; border: 1px solid var(--line); border-radius: var(--radius-pill);
+                  padding: 3px 10px; }
 
   h1 { font-size: 19px; margin: 0 0 4px; }
   .lead { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
@@ -38,20 +35,17 @@
 
   fieldset { border: 1px solid var(--line); border-radius: var(--radius-card, 10px); padding: 12px; margin: 0 0 8px; }
   legend { font-size: 13px; color: var(--muted); padding: 0 6px; }
-  .choices { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .choices label { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px;
-                   text-align: center; font-size: 14px; cursor: pointer; position: relative; }
+  .choices { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .choices label { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 4px;
+                   text-align: center; font-size: 13px; cursor: pointer; position: relative; }
   .choices input { position: absolute; opacity: 0; }
   .choices label:has(input:checked) { border-color: var(--color-accent, #333); border-width: 2px;
                                        background: var(--color-accent-soft, #f4f4f2); font-weight: 500; }
-  .choices.icon-choices label { padding: 14px 8px; display: flex; flex-direction: column;
-                                 align-items: center; gap: 4px; min-height: 84px; justify-content: center; }
-  .choice-icon { font-size: 30px; line-height: 1; }
-  .choice-label { font-size: 13px; }
-  .choice-label small { display: block; font-size: 10px; color: var(--muted); font-weight: 400; }
-
-  select, textarea, input[type=file] { width: 100%; font-size: 15px; padding: 8px;
+  select, textarea, input[type=file], input[type=text] { width: 100%; font-size: 15px; padding: 8px;
          border: 1px solid var(--line); border-radius: 8px; font-family: inherit; }
+  .toggle-row { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-top: 8px; }
+  .flag-row { display: flex; align-items: center; gap: 8px; font-size: 13px;
+              border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px; margin-top: 8px; }
   #submit { width: 100%; padding: 14px; font-size: 16px; border: 0; border-radius: 10px;
             background: var(--color-accent, #1a5c3a); color: #fff; transition: background .2s ease; }
   #submit:disabled { background: #bbb; }
@@ -59,9 +53,9 @@
   .status { font-size: 13px; color: var(--muted); margin: 6px 0 0; }
   .warn { color: var(--warn); }
   .ok { color: var(--ok); }
-  .notice { background: #fdf3f3; border: 1px solid #e6c8c8; border-radius: 8px;
-            padding: 10px; font-size: 13px; margin-top: 10px; }
   img.preview { max-width: 100%; border-radius: 8px; margin-top: 10px; display: block; }
+  .preview-pair { display: flex; gap: 8px; }
+  .preview-pair > div { flex: 1; }
   table { width: 100%; font-size: 12px; border-collapse: collapse; }
   td { padding: 2px 0; } td:first-child { color: var(--muted); width: 42%; }
   .mono { font-family: ui-monospace, monospace; }
@@ -72,10 +66,6 @@
   #map-confirm:disabled { color: var(--muted); }
   .info-notice { background: #f2f6fb; border: 1px solid #cddbea; border-radius: 8px;
                  padding: 10px; font-size: 13px; margin-top: 10px; }
-  .info-notice .row { display: flex; gap: 8px; margin-top: 8px; }
-  .info-notice button { flex: 1; padding: 9px; font-size: 13px;
-                         border: 1px solid var(--line); border-radius: 8px; background: #fff; }
-  .info-notice button:disabled { color: var(--muted); }
 
   .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex;
                      align-items: center; justify-content: center; padding: 16px; z-index: 10; }
@@ -90,35 +80,35 @@
   .modal-card .done-links a { display: block; padding: 11px; border: 1px solid var(--line);
                                border-radius: 8px; text-decoration: none; color: inherit; font-size: 14px; }
   .modal-card .done-links a:first-child { background: #1a5c3a; border-color: #1a5c3a; color: #fff; }
-  .modal-card .done-links a:hover { background: #f4f4f2; }
-  .modal-card .done-links a:first-child:hover { background: #164a30; }
-
-  .reject-force-btn { display: block; width: 100%; margin-top: 12px; padding: 6px;
-                       font-size: 12px; color: var(--muted); background: none; border: none;
-                       cursor: pointer; text-decoration: underline; }
-  .reject-force-btn:hover { color: #222; }
-  .reject-force-btn:disabled { color: #bbb; cursor: default; text-decoration: none; }
-  .reject-force-msg { font-size: 11px; margin: 6px 0 0; min-height: 1.2em; }
 </style>
 <body>
 
 <div id="topbar">
-  <a href="/">← モリノミカタに戻る</a>
-  <div id="buddy-badge"><span id="buddy-emoji">🥚</span><span id="buddy-level">Lv.1</span></div>
+  <a href="/">← トップ</a>
+  <div id="points-badge">0 pt</div>
 </div>
-<h1>ヨソモンを記録する</h1>
-<p class="lead">サクラ・ウメ・モモ・スモモなどの木で見つけた外来種「ヨソモン(クビアカツヤカミキリ)」の
-  証拠を教えてください。相棒(キツツキ)のごはんになります。<a href="mypage.html">マイページ</a></p>
+<h1>📷 外国語表記を投稿する</h1>
+<p class="lead">街で見かけた外国語のメニュー・看板・注意書きを撮って投稿してください。
+  語学力は不要です。<a href="mypage.html">マイページ</a></p>
 
-<div id="progress-bar"><div id="progress-fill" style="width:20%"></div></div>
-<p id="step-label">Step 1 / 5</p>
+<div id="progress-bar"><div id="progress-fill" style="width:25%"></div></div>
+<p id="step-label">Step 1 / 4</p>
 
 <div class="step" data-step="1">
   <fieldset>
-    <legend>1. 写真(幹の根元が写るように)</legend>
-    <input id="file" type="file" accept="image/*" capture="environment">
-    <p class="status" id="img-status">未選択</p>
-    <div id="preview"></div>
+    <legend>1. 写真</legend>
+    <input id="file-src" type="file" accept="image/*" capture="environment">
+    <p class="status" id="src-status">未選択</p>
+    <div id="preview-src"></div>
+    <div class="toggle-row">
+      <input type="checkbox" id="has-tgt">
+      <label for="has-tgt">訳文が別の写真になっている</label>
+    </div>
+    <div id="tgt-wrap" hidden>
+      <input id="file-tgt" type="file" accept="image/*" capture="environment" style="margin-top:8px">
+      <p class="status" id="tgt-status">未選択</p>
+      <div id="preview-tgt"></div>
+    </div>
   </fieldset>
   <div class="step-nav">
     <button type="button" class="next-btn" data-next="2" disabled>つぎへ</button>
@@ -127,26 +117,26 @@
 
 <div class="step" data-step="2" hidden>
   <fieldset>
-    <legend>2. 何を見つけましたか</legend>
-    <div class="choices icon-choices" id="finding">
-      <label><input type="radio" name="finding" value="frass">
-        <span class="choice-icon">🪵</span><span class="choice-label">フラス<small>木くず状のフン</small></span></label>
-      <label><input type="radio" name="finding" value="adult_alive">
-        <span class="choice-icon">🐛</span><span class="choice-label">成虫<small>生きている</small></span></label>
-      <label><input type="radio" name="finding" value="adult_dead">
-        <span class="choice-icon">💀</span><span class="choice-label">成虫<small>死んでいる</small></span></label>
-      <label><input type="radio" name="finding" value="exit_hole">
-        <span class="choice-icon">🕳️</span><span class="choice-label">脱出孔</small></span></label>
-      <label><input type="radio" name="finding" value="none">
-        <span class="choice-icon">✅</span><span class="choice-label">見たが<small>異常なし</small></span></label>
+    <legend>2. 言語(訳文は何語?)</legend>
+    <div class="choices" id="lang-pair">
+      <label><input type="radio" name="lang_pair" value="ja-en">英語</label>
+      <label><input type="radio" name="lang_pair" value="ja-zh">中国語</label>
+      <label><input type="radio" name="lang_pair" value="ja-ko">韓国語</label>
     </div>
-    <div id="alive-notice" class="notice" hidden>
-      <strong>成虫を生きたまま持ち運ぶことは法律で禁止されています。</strong>
-      特定外来生物のため、その場で処分してください。
+  </fieldset>
+  <fieldset>
+    <legend>3. 何の表記? (わかれば)</legend>
+    <select id="place-kind">
+      <option value="unknown">わからない</option>
+      <option value="menu">メニュー</option>
+      <option value="sign">看板</option>
+      <option value="notice">注意書き</option>
+      <option value="other">その他</option>
+    </select>
+    <div class="flag-row">
+      <input type="checkbox" id="flagged">
+      <label for="flagged">これ、訳が変かも?と思った(任意)</label>
     </div>
-    <p class="status" id="none-hint" hidden>
-      「異常なし」も貴重なデータです。どの木を調べたかが分かるよう、幹の根元を撮影してください。
-    </p>
   </fieldset>
   <div class="step-nav">
     <button type="button" class="back-btn" data-back="1">もどる</button>
@@ -155,25 +145,6 @@
 </div>
 
 <div class="step" data-step="3" hidden>
-  <fieldset>
-    <legend>3. 木の種類</legend>
-    <select id="species">
-      <option value="unknown">わからない</option>
-      <option value="sakura">サクラ</option>
-      <option value="ume">ウメ</option>
-      <option value="momo">モモ</option>
-      <option value="sumomo">スモモ</option>
-      <option value="other_rosaceae">その他のバラ科</option>
-      <option value="non_rosaceae">バラ科以外</option>
-    </select>
-  </fieldset>
-  <div class="step-nav">
-    <button type="button" class="back-btn" data-back="2">もどる</button>
-    <button type="button" class="next-btn" data-next="4">つぎへ</button>
-  </div>
-</div>
-
-<div class="step" data-step="4" hidden>
   <fieldset>
     <legend>4. 位置情報</legend>
     <p class="status" id="loc-status">写真を選ぶと自動で取得します。</p>
@@ -184,102 +155,60 @@
       <button id="map-confirm" type="button" disabled>この位置に決定</button>
     </div>
     <div id="nearby-notice" class="info-notice" hidden>
-      <p style="margin:0">近くで最近、別の方から報告がありました。同じ発見の可能性があります。</p>
-      <div class="row">
-        <button id="nearby-yes" type="button">はい、私も見ました</button>
-        <button id="nearby-dismiss" type="button">いいえ、違います</button>
-      </div>
-      <p class="status" id="nearby-status"></p>
+      <p style="margin:0">近くで最近、別の方が同じ言語ペアで投稿しています。重複の可能性があります。</p>
     </div>
   </fieldset>
   <div class="step-nav">
-    <button type="button" class="back-btn" data-back="3">もどる</button>
-    <button type="button" class="next-btn" data-next="5" disabled>つぎへ</button>
+    <button type="button" class="back-btn" data-back="2">もどる</button>
+    <button type="button" class="next-btn" data-next="4" disabled>つぎへ</button>
   </div>
 </div>
 
-<div class="step" data-step="5" hidden>
+<div class="step" data-step="4" hidden>
   <fieldset>
     <legend>5. メモ(任意)</legend>
-    <textarea id="note" rows="2" maxlength="500" placeholder="場所の目印など"></textarea>
+    <textarea id="situation" rows="2" maxlength="500" placeholder="お店の名前や状況など"></textarea>
   </fieldset>
   <button id="submit" disabled>送信する</button>
   <p class="status" id="submit-status"></p>
   <div class="step-nav">
-    <button type="button" class="back-btn" data-back="4">もどる</button>
+    <button type="button" class="back-btn" data-back="3">もどる</button>
   </div>
 </div>
 
 <div id="done-modal" class="modal-backdrop" hidden>
   <div class="modal-card">
     <button type="button" id="done-close" class="modal-close" aria-label="閉じる">×</button>
-    <p class="done-title">通報しました!</p>
+    <p class="done-title">投稿しました!</p>
     <p class="done-desc" id="done-desc">ご協力ありがとうございます!</p>
     <div class="done-links">
-      <a href="/">モリノミカタを見る</a>
-      <a href="map.html">被害マップを見る</a>
+      <a href="/">トップに戻る</a>
+      <a href="menu.html">キュレーションに参加する</a>
       <a href="mypage.html">マイページを見る</a>
     </div>
-  </div>
-</div>
-
-<div id="reject-modal" class="modal-backdrop" hidden>
-  <div class="modal-card">
-    <button type="button" id="reject-close" class="modal-close" aria-label="閉じる">×</button>
-    <p class="done-title">写真を確認できませんでした</p>
-    <p class="done-desc" id="reject-message"></p>
-    <div class="done-links">
-      <a href="#" id="reject-retake">撮り直す</a>
-    </div>
-    <button type="button" id="reject-force" class="reject-force-btn">このまま送信する</button>
-    <p class="reject-force-msg" id="reject-force-msg"></p>
   </div>
 </div>
 
 <script type="module">
 import { meshCodes } from './mesh.js';
 import { parseExif } from './exif.js';
-import { getReporterId, bootstrapAuth } from './auth.js';
+import { getUserId, bootstrapAuth } from './auth.js';
 
-// --- 通報者ID(匿名。Googleログイン済みなら端末間で同じIDに揃う) -----------
-let reporterId = getReporterId();
-const authReady = bootstrapAuth().then((r) => { reporterId = r.reporterId; });
+let userId = getUserId();
+const authReady = bootstrapAuth().then((r) => { userId = r.userId; });
 
 const $ = (id) => document.getElementById(id);
-const state = { full: null, thumb: null, exif: null, geo: null, point: null };
-let lastRejected = null; // AI却下(auto_rejected)になった直近の通報。撮り直し/強制送信で使う
+const state = { srcFull: null, srcThumb: null, tgtFull: null, tgtThumb: null, exif: null, geo: null, point: null };
 
-function doneDescText(character) {
-  if (!character) return 'ご協力ありがとうございます!';
-  if (character.leveled_up) {
-    return `🎉 レベルアップ!相棒が Lv.${character.level} になりました(+${character.xp_gained} XP)`;
-  }
-  return `ご協力ありがとうございます!相棒が育ちました(+${character.xp_gained} XP, Lv.${character.level})`;
-}
-
-// --- 相棒バッジ(常駐。本物のアート素材が無いための暫定ビジュアル) -----------
-const LEVEL_SPRITES = [
-  { min: 1, max: 2, emoji: '🥚' },
-  { min: 3, max: 5, emoji: '🐣' },
-  { min: 6, max: 9, emoji: '🐦' },
-  { min: 10, max: Infinity, emoji: '🦅' },
-];
-function spriteForLevel(level) {
-  return (LEVEL_SPRITES.find((s) => level >= s.min && level <= s.max) || LEVEL_SPRITES[0]).emoji;
-}
-async function loadBuddyBadge() {
+async function loadPointsBadge() {
   try {
-    const res = await fetch(`/api/character?reporter_id=${reporterId}`);
+    const res = await fetch(`/api/mypage?user_id=${userId}`);
     const j = await res.json();
-    if (j.ok) {
-      $('buddy-emoji').textContent = spriteForLevel(j.level);
-      $('buddy-level').textContent = `Lv.${j.level}`;
-    }
+    if (j.ok) $('points-badge').textContent = `${j.summary.points_total} pt / Lv.${j.summary.level}`;
   } catch { /* バッジ表示だけなので失敗しても致命的ではない */ }
 }
 
-// --- ステップウィザード(既存の入力ロジックは一切変更せず、見た目の並び方だけを変える) ---
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 4;
 function showStep(n) {
   document.querySelectorAll('.step').forEach((el) => {
     el.hidden = Number(el.dataset.step) !== n;
@@ -295,7 +224,6 @@ document.querySelectorAll('.back-btn').forEach((btn) => {
   btn.addEventListener('click', () => showStep(Number(btn.dataset.back)));
 });
 
-// --- 位置情報 ---------------------------------------------------------
 function getPosition() {
   return new Promise((res, rej) => {
     if (!navigator.geolocation) return rej(new Error('位置情報を利用できません'));
@@ -312,7 +240,6 @@ function distanceM(a, b) {
   return Math.round(2 * R * Math.asin(Math.sqrt(s)));
 }
 
-// --- リサイズ ---------------------------------------------------------
 async function resize(file, maxEdge, quality) {
   let bmp;
   try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); }
@@ -327,118 +254,91 @@ async function resize(file, maxEdge, quality) {
   return { blob, w, h };
 }
 
-// --- 選択肢 -----------------------------------------------------------
-$('finding').addEventListener('change', (e) => {
-  $('alive-notice').hidden = e.target.value !== 'adult_alive';
-  $('none-hint').hidden = e.target.value !== 'none';
+$('has-tgt').addEventListener('change', (e) => {
+  $('tgt-wrap').hidden = !e.target.checked;
+  if (!e.target.checked) {
+    state.tgtFull = null; state.tgtThumb = null;
+    $('file-tgt').value = '';
+    $('tgt-status').textContent = '未選択';
+    $('preview-tgt').innerHTML = '';
+  }
   refresh();
 });
 
-// --- 写真 -------------------------------------------------------------
-$('file').addEventListener('change', async (ev) => {
+$('file-src').addEventListener('change', async (ev) => {
   const file = ev.target.files[0];
   if (!file) return;
-  $('img-status').textContent = '処理中...';
-  $('submit').disabled = true;
-
+  $('src-status').textContent = '処理中...';
   try {
     state.exif = parseExif(await file.slice(0, 131072).arrayBuffer());
     const full = await resize(file, 1600, 0.82);
     const thumb = await resize(file, 512, 0.75);
-    state.full = full.blob;
-    state.thumb = thumb.blob;
-    $('img-status').innerHTML =
-      `<span class="ok">${full.w}×${full.h} / ${(full.blob.size / 1024).toFixed(0)} KB に圧縮</span>`;
-    $('preview').innerHTML =
-      `<img class="preview" src="${URL.createObjectURL(full.blob)}" alt="">`;
+    state.srcFull = full.blob;
+    state.srcThumb = thumb.blob;
+    $('src-status').innerHTML = `<span class="ok">${full.w}×${full.h} / ${(full.blob.size / 1024).toFixed(0)} KB</span>`;
+    $('preview-src').innerHTML = `<img class="preview" src="${URL.createObjectURL(full.blob)}" alt="">`;
   } catch (e) {
-    $('img-status').innerHTML = `<span class="warn">画像を処理できません: ${e.message}</span>`;
+    $('src-status').innerHTML = `<span class="warn">画像を処理できません: ${e.message}</span>`;
     return;
   }
-
   await locate();
   refresh();
 });
+
+$('file-tgt').addEventListener('change', async (ev) => {
+  const file = ev.target.files[0];
+  if (!file) return;
+  $('tgt-status').textContent = '処理中...';
+  try {
+    const full = await resize(file, 1600, 0.82);
+    const thumb = await resize(file, 512, 0.75);
+    state.tgtFull = full.blob;
+    state.tgtThumb = thumb.blob;
+    $('tgt-status').innerHTML = `<span class="ok">${full.w}×${full.h} / ${(full.blob.size / 1024).toFixed(0)} KB</span>`;
+    $('preview-tgt').innerHTML = `<img class="preview" src="${URL.createObjectURL(full.blob)}" alt="">`;
+  } catch (e) {
+    $('tgt-status').innerHTML = `<span class="warn">画像を処理できません: ${e.message}</span>`;
+  }
+  refresh();
+});
+
+document.getElementById('lang-pair').addEventListener('change', refresh);
 
 const SRC_LABEL = { exif: '写真の記録', geolocation: '端末の現在地', manual: '地図で指定' };
 
 function setPoint(lat, lng, src, acc = null, conflict = 0) {
   state.point = { lat, lng, src, conflict, acc };
   $('map-fallback').hidden = true;
-
   const m = meshCodes(lat, lng);
   $('loc-status').innerHTML = `<span class="ok">取得しました</span>`;
   $('loc-detail').innerHTML =
     `<tr><td>座標</td><td class="mono">${lat.toFixed(5)}, ${lng.toFixed(5)}</td></tr>` +
-    `<tr><td>取得元</td><td>${SRC_LABEL[src]}` +
-      `${acc != null ? ` / 誤差 約${Math.round(acc)}m` : ''}</td></tr>` +
-    `<tr><td>メッシュ</td><td class="mono">${m.mesh4}</td></tr>` +
-    (conflict ? `<tr><td>注意</td><td class="warn">写真の位置と現在地が離れています</td></tr>` : '');
+    `<tr><td>取得元</td><td>${SRC_LABEL[src]}${acc != null ? ` / 誤差 約${Math.round(acc)}m` : ''}</td></tr>` +
+    `<tr><td>メッシュ</td><td class="mono">${m.mesh4}</td></tr>`;
   checkNearby(lat, lng);
   refresh();
 }
 
-// --- 近隣の既存通報チェック(重複抑制の一次確認) --------------------------
-let nearbySeq = 0;
-let nearbyMatch = null;
-
 async function checkNearby(lat, lng) {
-  const seq = ++nearbySeq;
   $('nearby-notice').hidden = true;
-  $('nearby-status').textContent = '';
-  $('nearby-yes').hidden = false;
-  $('nearby-yes').disabled = false;
-  $('nearby-dismiss').hidden = false;
-  nearbyMatch = null;
+  const langEl = document.querySelector('input[name=lang_pair]:checked');
+  if (!langEl) return;
   try {
-    const params = new URLSearchParams({ lat: String(lat), lng: String(lng), reporter_id: reporterId });
+    const params = new URLSearchParams({
+      lat: String(lat), lng: String(lng), user_id: userId, lang_pair: langEl.value,
+    });
     const res = await fetch(`/api/nearby?${params}`);
     const j = await res.json();
-    if (seq !== nearbySeq) return; // より新しい呼び出しで上書き済み
-    if (j.ok && j.match) {
-      nearbyMatch = j;
-      $('nearby-notice').hidden = false;
-    }
-  } catch {
-    // 失敗しても通報フローは止めない
-  }
+    if (j.ok && j.match) $('nearby-notice').hidden = false;
+  } catch { /* 失敗してもフローは止めない */ }
 }
-
-$('nearby-yes').addEventListener('click', async () => {
-  if (!nearbyMatch || !state.point) return;
-  $('nearby-yes').disabled = true;
-  try {
-    await authReady;
-    const res = await fetch('/api/reactions', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        reporter_id: reporterId, report_id: nearbyMatch.report_id, kind: 'seen_too',
-        lat: state.point.lat, lng: state.point.lng,
-      }),
-    });
-    const j = await res.json();
-    if (!j.ok) throw new Error(j.error);
-    $('nearby-status').innerHTML = '<span class="ok">ありがとうございます。記録しました。</span>';
-    $('nearby-yes').hidden = true;
-    $('nearby-dismiss').hidden = true;
-  } catch (e) {
-    $('nearby-yes').disabled = false;
-    $('nearby-status').innerHTML = `<span class="warn">${e.message}</span>`;
-  }
-});
-
-$('nearby-dismiss').addEventListener('click', () => {
-  $('nearby-notice').hidden = true;
-});
 
 async function locate() {
   $('loc-status').textContent = '位置情報を取得中...';
   try {
     const p = await getPosition();
     state.geo = { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy };
-  } catch (e) {
-    state.geo = null;
-  }
+  } catch { state.geo = null; }
 
   const e = state.exif || {};
   const src = e.lat != null ? 'exif' : (state.geo ? 'geolocation' : null);
@@ -448,18 +348,15 @@ async function locate() {
     state.point = null;
     $('loc-detail').innerHTML = '';
     $('loc-status').innerHTML =
-      `<span class="warn">位置情報を取得できません。ブラウザの位置情報を許可するか、` +
-      `下の地図で場所を指定してください。</span>`;
+      `<span class="warn">位置情報を取得できません。ブラウザの位置情報を許可するか、下の地図で場所を指定してください。</span>`;
     openMapFallback();
     return;
   }
-
   let conflict = 0;
   if (e.lat != null && state.geo && distanceM(e, state.geo) > 300) conflict = 1;
   setPoint(pt.lat, pt.lng, src, state.geo?.acc ?? null, conflict);
 }
 
-// --- 地図タップによる手動指定(GPS不許可・取得失敗時のフォールバック) --------
 let mapLibrePromise = null;
 function loadMapLibre() {
   if (mapLibrePromise) return mapLibrePromise;
@@ -477,33 +374,22 @@ let map = null, marker = null, manualLatLng = null;
 
 async function openMapFallback() {
   $('map-fallback').hidden = false;
-  try {
-    await loadMapLibre();
-  } catch (e) {
-    $('map').innerHTML = `<p class="status warn">${e.message}</p>`;
-    return;
-  }
-
+  try { await loadMapLibre(); }
+  catch (e) { $('map').innerHTML = `<p class="status warn">${e.message}</p>`; return; }
   if (map) { map.resize(); return; }
 
   map = new maplibregl.Map({
     container: 'map',
     style: {
       version: 8,
-      sources: {
-        gsi: {
-          type: 'raster',
-          tiles: ['https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png'],
-          tileSize: 256,
-          maxzoom: 18,
-          attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" ' +
-                       'target="_blank" rel="noopener">地理院タイル</a>',
-        },
-      },
+      sources: { gsi: {
+        type: 'raster', tiles: ['https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png'],
+        tileSize: 256, maxzoom: 18,
+        attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">地理院タイル</a>',
+      } },
       layers: [{ id: 'gsi', type: 'raster', source: 'gsi' }],
     },
-    center: [139.767, 35.681],
-    zoom: 5,
+    center: [139.767, 35.681], zoom: 5,
   });
   map.addControl(new maplibregl.NavigationControl(), 'top-right');
   map.on('click', (ev) => {
@@ -515,37 +401,32 @@ async function openMapFallback() {
   setTimeout(() => map.resize(), 0);
 }
 
-$('map-toggle').addEventListener('click', (ev) => {
-  ev.preventDefault();
-  openMapFallback();
-});
-
+$('map-toggle').addEventListener('click', (ev) => { ev.preventDefault(); openMapFallback(); });
 $('map-confirm').addEventListener('click', () => {
   if (!manualLatLng) return;
   setPoint(manualLatLng.lat, manualLatLng.lng, 'manual');
 });
 
 function refresh() {
-  const f = document.querySelector('input[name=finding]:checked');
-  $('submit').disabled = !(f && state.full && state.point);
-  // ステップ送りボタンの有効/無効。判定そのものは上の submit の可否判定と同じ状態を見ているだけで、
-  // 新しいロジックは足していない。
-  document.querySelector('.step[data-step="1"] .next-btn').disabled = !state.full;
-  document.querySelector('.step[data-step="2"] .next-btn').disabled = !f;
-  document.querySelector('.step[data-step="4"] .next-btn').disabled = !state.point;
+  const lang = document.querySelector('input[name=lang_pair]:checked');
+  const tgtOk = !$('has-tgt').checked || (state.tgtFull && state.tgtThumb);
+  $('submit').disabled = !(lang && state.srcFull && state.point && tgtOk);
+  document.querySelector('.step[data-step="1"] .next-btn').disabled = !state.srcFull;
+  document.querySelector('.step[data-step="2"] .next-btn').disabled = !lang;
+  document.querySelector('.step[data-step="3"] .next-btn').disabled = !state.point;
 }
 
-// --- 送信 -------------------------------------------------------------
 $('submit').addEventListener('click', async () => {
-  const finding = document.querySelector('input[name=finding]:checked').value;
+  const langPair = document.querySelector('input[name=lang_pair]:checked').value;
   $('submit').disabled = true;
   $('submit-status').textContent = '送信中...';
   await authReady;
 
   const fd = new FormData();
-  fd.append('reporter_id', reporterId);
-  fd.append('finding', finding);
-  fd.append('tree_species', $('species').value);
+  fd.append('user_id', userId);
+  fd.append('lang_pair', langPair);
+  fd.append('place_kind', $('place-kind').value);
+  fd.append('flagged', $('flagged').checked ? '1' : '0');
   fd.append('lat', String(state.point.lat));
   fd.append('lng', String(state.point.lng));
   fd.append('loc_source', state.point.src);
@@ -554,35 +435,25 @@ $('submit').addEventListener('click', async () => {
   if (state.exif && state.exif.observedAt) {
     fd.append('observed_at', String(Math.floor(state.exif.observedAt.getTime() / 1000)));
   }
-  fd.append('note', $('note').value);
-  fd.append('full', state.full, 'full.jpg');
-  fd.append('thumb', state.thumb, 'thumb.jpg');
+  fd.append('situation', $('situation').value);
+  fd.append('src_full', state.srcFull, 'src-full.jpg');
+  fd.append('src_thumb', state.srcThumb, 'src-thumb.jpg');
+  if (state.tgtFull) {
+    fd.append('tgt_full', state.tgtFull, 'tgt-full.jpg');
+    fd.append('tgt_thumb', state.tgtThumb, 'tgt-thumb.jpg');
+  }
 
   try {
-    const res = await fetch('/api/reports', { method: 'POST', body: fd });
+    const res = await fetch('/api/posts', { method: 'POST', body: fd });
     const j = await res.json();
     if (!j.ok) throw new Error(j.error || '送信に失敗しました');
-    if (j.status === 'auto_rejected') {
-      // AIが「明らかに無関係」と判定 -> 公開はされずポイントも付かない。撮り直しを促し、
-      // フォームはそのまま(写真だけ選び直せば)再送信できる状態に戻す。
-      lastRejected = { id: j.id };
-      $('submit-status').innerHTML = `<span class="warn">${j.ai_message}</span>`;
-      $('submit').disabled = false;
-      $('reject-message').textContent = j.ai_message;
-      $('reject-force-msg').textContent = '';
-      $('reject-force').disabled = false;
-      $('reject-modal').hidden = false;
-    } else {
-      $('submit-status').innerHTML =
-        `<span class="ok">送信しました。ありがとうございます。</span><br>` +
-        `受付番号 <span class="mono">${j.id.slice(0, 8)}</span> / ${j.points} ポイント獲得` +
-        (j.character ? ` / 相棒 +${j.character.xp_gained} XP` : '');
-      $('done-desc').textContent = doneDescText(j.character);
-      $('submit').innerHTML = '✅ 送信済み';
-      $('submit').classList.add('sent');
-      $('done-modal').hidden = false;
-      loadBuddyBadge();
-    }
+    $('submit-status').innerHTML =
+      `<span class="ok">送信しました。ありがとうございます。</span><br>` +
+      `受付番号 <span class="mono">${j.id.slice(0, 8)}</span> / ${j.points} ポイント獲得`;
+    $('submit').innerHTML = '✅ 送信済み';
+    $('submit').classList.add('sent');
+    $('done-modal').hidden = false;
+    loadPointsBadge();
   } catch (e) {
     $('submit-status').innerHTML = `<span class="warn">${e.message}</span>`;
     $('submit').disabled = false;
@@ -590,74 +461,10 @@ $('submit').addEventListener('click', async () => {
 });
 
 $('done-close').addEventListener('click', () => { $('done-modal').hidden = true; });
-$('done-modal').addEventListener('click', (e) => {
-  if (e.target === $('done-modal')) $('done-modal').hidden = true;
-});
-
-$('reject-close').addEventListener('click', () => { $('reject-modal').hidden = true; });
-$('reject-modal').addEventListener('click', (e) => {
-  if (e.target === $('reject-modal')) $('reject-modal').hidden = true;
-});
-
-$('reject-retake').addEventListener('click', (e) => {
-  e.preventDefault();
-  const id = lastRejected?.id;
-  $('reject-modal').hidden = true;
-  if (id) {
-    // ベストエフォート。失敗しても撮り直しの妨げにはしない(このままDBに
-    // auto_rejected行が残っても実害はなく、マイページから後でも削除できる)。
-    fetch('/api/reports/delete', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ report_id: id, reporter_id: reporterId }),
-    }).catch(() => {});
-  }
-  lastRejected = null;
-  state.full = null;
-  state.thumb = null;
-  $('file').value = '';
-  $('img-status').textContent = '未選択';
-  $('preview').innerHTML = '';
-  $('submit-status').textContent = '';
-  refresh();
-  showStep(1);
-  // ユーザー操作(このクリック)の直後・同期的な呼び出しなので、iOS Safari 等でも
-  // ブロックされずファイル選択(カメラ起動)がそのまま開く。
-  $('file').click();
-});
-
-$('reject-force').addEventListener('click', async () => {
-  const id = lastRejected?.id;
-  if (!id) return;
-  $('reject-force').disabled = true;
-  $('reject-force-msg').textContent = '送信中...';
-  try {
-    await authReady;
-    const res = await fetch('/api/reports/force_review', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ report_id: id, reporter_id: reporterId }),
-    });
-    const j = await res.json();
-    if (!j.ok) throw new Error(j.error || '送信に失敗しました');
-    $('reject-modal').hidden = true;
-    $('submit-status').innerHTML =
-      `<span class="ok">送信しました。ありがとうございます。</span><br>` +
-      `受付番号 <span class="mono">${id.slice(0, 8)}</span> / ${j.points} ポイント獲得` +
-      (j.character ? ` / 相棒 +${j.character.xp_gained} XP` : '');
-    $('done-desc').textContent = doneDescText(j.character);
-    $('submit').innerHTML = '✅ 送信済み';
-    $('submit').classList.add('sent');
-    $('submit').disabled = true;
-    $('done-modal').hidden = false;
-    lastRejected = null;
-    loadBuddyBadge();
-  } catch (e) {
-    $('reject-force-msg').innerHTML = `<span class="warn">${e.message}</span>`;
-    $('reject-force').disabled = false;
-  }
-});
+$('done-modal').addEventListener('click', (e) => { if (e.target === $('done-modal')) $('done-modal').hidden = true; });
 
 showStep(1);
-authReady.then(() => { loadBuddyBadge(); });
+authReady.then(() => { loadPointsBadge(); });
 </script>
 </body>
 </html>

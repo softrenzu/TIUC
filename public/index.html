@@ -7,391 +7,120 @@
 <style>
   :root { --line:#ddd; --muted:#666; --warn:#a33; --ok:#161; }
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; }
+  html, body { margin: 0; min-height: 100%; }
   body { font-family: system-ui, -apple-system, sans-serif; color: #222;
          display: flex; flex-direction: column; }
 
   #topbar { display: flex; align-items: center; gap: 8px; padding: 10px 16px;
             border-bottom: 1px solid var(--line); flex: none; }
-  #topbar .menu-link { font-size: 12px; color: var(--muted); text-decoration: none; flex: none; }
-  #topbar h1 { font-size: 16px; margin: 0; flex: 1; text-align: center; }
-  #topbar h1 .beta { font-size: 11px; color: var(--muted); font-weight: 400;
-                      border: 1px solid var(--line); border-radius: 999px; padding: 1px 6px; }
+  #topbar h1 { font-size: 15px; margin: 0; flex: 1; }
+  #topbar h1 .tagline { display: block; font-size: 10px; color: var(--muted); font-weight: 400; }
   #login-link { font-size: 12px; color: #1a4d73; text-decoration: none; flex: none; }
 
-  #char-area { flex: none; min-height: 38vh; display: flex; flex-direction: column;
-               align-items: center; justify-content: center; gap: 8px;
-               background: linear-gradient(180deg, #eef5f0, #fff); padding: 16px; }
-  .char-tap { display: flex; flex-direction: column; align-items: center; gap: 0;
-              text-decoration: none; color: inherit; -webkit-tap-highlight-color: transparent;
-              border-radius: 20px; padding: 6px 18px; }
-  .char-tap:active { background: rgba(26,92,58,.08); }
-  #char-sprite { font-size: 88px; line-height: 1; transition: transform .1s ease; }
-  .char-tap:active #char-sprite { transform: scale(0.92); }
-  #char-level { font-size: 18px; font-weight: 700; }
-  .char-hint { font-size: 11px; color: var(--muted); margin-top: 2px; }
-  .xp-bar { width: 220px; height: 10px; border-radius: 999px; background: #e3e3df;
-            overflow: hidden; margin-top: 8px; }
-  .xp-bar-fill { height: 100%; background: #1a5c3a; border-radius: 999px;
-                 transition: width .3s ease; }
-  #xp-label { font-size: 12px; color: var(--muted); }
+  #hero { flex: none; padding: 28px 16px 20px; text-align: center;
+          background: linear-gradient(180deg, #eef5f0, #fff); }
+  #hero .headline { font-size: 15px; color: #222; margin: 0 0 14px; line-height: 1.5; }
+  #stats-row { display: flex; justify-content: center; gap: 18px; }
+  #stats-row .stat { text-align: center; }
+  #stats-row .n { font-size: 20px; font-weight: 700; color: var(--color-accent, #1a5c3a); }
+  #stats-row .label { font-size: 11px; color: var(--muted); }
 
-  #action-wrap { flex: none; padding: 16px; }
-  .action-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-  .action-tile { display: flex; flex-direction: column; align-items: center; justify-content: center;
-                 gap: 6px; padding: 16px 6px; min-height: 84px; border-radius: var(--radius-card, 16px);
-                 border: 0; cursor: pointer; text-decoration: none; text-align: center;
-                 font-family: inherit; -webkit-tap-highlight-color: transparent; }
-  .action-tile .action-icon { font-size: 30px; line-height: 1; }
-  .action-tile .action-label { font-size: 11px; font-weight: 600; line-height: 1.3; }
-  .action-tile.primary { background: #1a5c3a; color: #fff; }
-  .action-tile.primary:active { background: #164a30; }
-  .action-tile.secondary { background: #1a4d73; color: #fff; }
-  .action-tile.secondary:active { background: #163f5e; }
-  .action-tile.tertiary { background: #fff; color: #222; border: 1px solid var(--line); }
-  .action-tile.tertiary:active { background: #f4f4f2; }
-  #action-desc { font-size: 12px; color: var(--muted); margin: 10px 0 0; text-align: center; }
+  #modes { flex: none; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .mode-card { display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: var(--radius-card, 16px);
+               text-decoration: none; color: inherit; border: 1px solid var(--line); }
+  .mode-card .icon { font-size: 32px; flex: none; }
+  .mode-card .body { flex: 1; min-width: 0; }
+  .mode-card .title { font-size: 15px; font-weight: 700; }
+  .mode-card .desc { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .mode-card.primary { background: var(--color-accent, #1a5c3a); color: #fff; border-color: var(--color-accent, #1a5c3a); }
+  .mode-card.primary .desc { color: #cfe3d8; }
+  .mode-card.secondary { background: var(--color-secondary, #1a4d73); color: #fff; border-color: var(--color-secondary, #1a4d73); }
+  .mode-card.secondary .desc { color: #cfe0ea; }
+  .mode-card.tertiary { background: #fff; }
+  .mode-card.tertiary:active { background: #f4f4f2; }
 
-  #triage-area { flex: 1; display: flex; flex-direction: column; align-items: center;
-                 justify-content: center; padding: 16px; gap: 12px; position: relative; }
-  #triage-area[hidden] { display: none; }
-  #triage-status { font-size: 14px; color: var(--muted); text-align: center; }
-  #triage-card { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 10px; }
-  #triage-card[hidden] { display: none; }
-  #triage-img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 12px;
-                background: #eee; display: block; }
-  .triage-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .triage-buttons button { padding: 14px 8px; font-size: 14px; border: 1px solid var(--line);
-                            border-radius: 10px; background: #fff; cursor: pointer; }
-  .triage-buttons button:disabled { color: #bbb; cursor: default; }
-  .triage-buttons button.skip { grid-column: 1 / -1; color: var(--muted); background: none;
-                                 border-style: dashed; }
-  #triage-close { color: var(--muted); background: none; border: none; text-decoration: underline;
-                  padding: 6px; font-size: 13px; cursor: pointer; }
+  #my-points { flex: none; margin: 0 16px 16px; padding: 12px 16px; border: 1px solid var(--line);
+               border-radius: var(--radius-card, 16px); display: flex; align-items: center;
+               justify-content: space-between; text-decoration: none; color: inherit; }
+  #my-points .label { font-size: 12px; color: var(--muted); }
+  #my-points .value { font-size: 16px; font-weight: 700; }
 
-  .xp-toast { position: absolute; top: 8px; left: 50%; transform: translate(-50%, -8px);
-              font-size: 15px; font-weight: 700; color: #1a5c3a; background: #eef5f0;
-              border: 1px solid #cfe3d8; border-radius: 999px; padding: 6px 16px;
-              opacity: 0; transition: opacity .2s ease, transform .2s ease; pointer-events: none; }
-  .xp-toast.show { opacity: 1; transform: translate(-50%, 0); }
-
-  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex;
-                     align-items: center; justify-content: center; padding: 16px; z-index: 20; }
-  .modal-backdrop[hidden] { display: none; }
-  #levelup-modal .modal-card { background: #fff; border-radius: 16px; max-width: 320px; width: 100%;
-                                padding: 28px 20px; text-align: center; }
-  #levelup-title { font-size: 18px; font-weight: 700; margin: 0 0 12px; color: #1a5c3a; }
-  #levelup-sprite { font-size: 72px; line-height: 1; margin: 0 0 8px; }
-  #levelup-level { font-size: 22px; font-weight: 700; margin: 0 0 20px; }
-  .action-btn { display: block; width: 100%; padding: 14px; font-size: 16px; font-weight: 700;
-                color: #fff; border: 0; border-radius: 999px; cursor: pointer;
-                text-decoration: none; text-align: center; }
-  .action-btn.primary { background: #1a5c3a; }
-  .action-btn.primary:active { background: #164a30; }
-  .action-btn.secondary { background: #1a4d73; }
-  .action-btn.secondary:active { background: #163f5e; }
-  #levelup-modal .modal-card .action-btn { margin-top: 8px; }
-
-  footer { flex: none; padding: 12px 16px; }
-  footer .note { font-size: 11px; color: var(--muted); margin: 0; text-align: center; }
+  footer { flex: 1; display: flex; align-items: flex-end; padding: 12px 16px; }
+  footer .note { font-size: 11px; color: var(--muted); margin: 0; text-align: center; width: 100%; }
 </style>
 <body>
 
 <div id="topbar">
-  <a class="menu-link" href="menu.html">☰ メニュー</a>
-  <h1>モリノミカタ <span class="beta">β</span></h1>
+  <h1>TIUC<span class="tagline">Today is under construction.</span></h1>
   <a id="login-link" href="#">ログイン</a>
 </div>
 
-<section id="char-area">
-  <a id="char-link" href="mypage.html" class="char-tap">
-    <div id="char-sprite">🥚</div>
-    <div id="char-level">Lv.1</div>
-  </a>
-  <p class="char-hint">タップしてマイページへ</p>
-  <div class="xp-bar"><div class="xp-bar-fill" id="xp-fill" style="width:0%"></div></div>
-  <div id="xp-label">0 / 20 XP</div>
+<section id="hero">
+  <p class="headline">街のヘンな外国語表記、<br>みんなで見つけて、なおそう。</p>
+  <div id="stats-row">
+    <div class="stat"><div class="n" id="stat-posts">—</div><div class="label">投稿</div></div>
+    <div class="stat"><div class="n" id="stat-fixed">—</div><div class="label">確定した修正</div></div>
+  </div>
 </section>
 
-<div id="action-wrap">
-  <div class="action-grid">
-    <a href="report.html" class="action-tile primary">
-      <span class="action-icon">📷</span>
-      <span class="action-label">ヨソモンを<br>記録する</span>
-    </a>
-    <button type="button" id="start-btn" class="action-tile secondary">
-      <span class="action-icon">🔍</span>
-      <span class="action-label">写真を<br>判定する</span>
-    </button>
-    <a href="map.html" class="action-tile tertiary">
-      <span class="action-icon">🗺️</span>
-      <span class="action-label">出現情報</span>
-    </a>
-  </div>
-  <p id="action-desc">外来種「ヨソモン」を見つけて記録すると、相棒のキツツキが育ちます</p>
+<div id="modes">
+  <a href="report.html" class="mode-card primary">
+    <span class="icon">📷</span>
+    <span class="body">
+      <span class="title">撮影投稿</span>
+      <span class="desc">街で見かけた外国語表記を撮るだけ。語学力は不要です</span>
+    </span>
+  </a>
+  <a href="menu.html" class="mode-card secondary">
+    <span class="icon">🔍</span>
+    <span class="body">
+      <span class="title">キュレーション</span>
+      <span class="desc">違和感チェック・修正提案で投稿を育てる</span>
+    </span>
+  </a>
+  <a href="map.html" class="mode-card tertiary">
+    <span class="icon">🗺️</span>
+    <span class="body">
+      <span class="title">マップで見る</span>
+      <span class="desc">みんなの投稿状況を地図で確認</span>
+    </span>
+  </a>
 </div>
 
-<section id="triage-area" hidden>
-  <p id="triage-status"></p>
-  <div id="triage-card" hidden>
-    <img id="triage-img" alt="判定対象の写真">
-    <div class="triage-buttons">
-      <button type="button" data-choice="tree">🌳 木っぽい</button>
-      <button type="button" data-choice="evidence">🪵 証拠あり</button>
-      <button type="button" data-choice="irrelevant">❌ 無関係</button>
-      <button type="button" data-choice="skip" class="skip">🤷 わからない</button>
-    </div>
-  </div>
-  <p class="xp-toast" id="xp-toast"></p>
-  <button type="button" id="triage-close" class="close-triage">判定をやめる</button>
-</section>
+<a href="mypage.html" id="my-points">
+  <span class="label">あなたのポイント</span>
+  <span class="value" id="my-points-value">— pt</span>
+</a>
 
 <footer>
-  <p class="note">表示される写真は位置情報・投稿者情報を含まないサムネイルのみです。
-    最終判定は自治体の担当者が行います。相棒のビジュアルは仮のものです。</p>
+  <p class="note">ログイン不要・匿名で利用できます。写真は判定・修正の関係者のみが閲覧できます。</p>
 </footer>
 
-<div id="levelup-modal" class="modal-backdrop" hidden>
-  <div class="modal-card">
-    <p id="levelup-title">🎉 レベルアップ!</p>
-    <div id="levelup-sprite">🐣</div>
-    <p id="levelup-level">Lv.2</p>
-    <button type="button" id="levelup-share" class="action-btn secondary">📤 シェア</button>
-    <button type="button" id="levelup-close" class="action-btn primary">つづける</button>
-  </div>
-</div>
-
 <script type="module">
-import { getReporterId, bootstrapAuth, googleLoginUrl } from './auth.js';
+import { getUserId, bootstrapAuth, googleLoginUrl } from './auth.js';
 
 const $ = (id) => document.getElementById(id);
-let reporterId = getReporterId();
-const authReady = bootstrapAuth().then((r) => { reporterId = r.reporterId; });
-
-// 本物のアート素材が無いための暫定ビジュアル(レベル帯で絵文字が変わるだけ)。
-const LEVEL_SPRITES = [
-  { min: 1, max: 2, emoji: '🥚' },
-  { min: 3, max: 5, emoji: '🐣' },
-  { min: 6, max: 9, emoji: '🐥' },
-  { min: 10, max: Infinity, emoji: '🦅' },
-];
-function spriteForLevel(level) {
-  return (LEVEL_SPRITES.find((s) => level >= s.min && level <= s.max) || LEVEL_SPRITES[0]).emoji;
-}
-
-let lastLevel = 1;
-let shareLevel = 1;
-
-function renderCharacter(j) {
-  $('char-sprite').textContent = spriteForLevel(j.level);
-  $('char-level').textContent = `Lv.${j.level}`;
-  const pct = Math.round((j.xp_into_level / j.xp_for_next_level) * 100);
-  $('xp-fill').style.width = `${pct}%`;
-  $('xp-label').textContent = `${j.xp_into_level} / ${j.xp_for_next_level} XP`;
-  lastLevel = j.level;
-}
-
-// --- 手応え(紙吹雪・チャイム音・触覚)。いずれも外部アセット不要、非対応環境は自然にno-op ---
-function vibrate(pattern) {
-  try { navigator.vibrate?.(pattern); } catch { /* 非対応環境は無視 */ }
-}
-
-function fireConfetti() {
-  const canvas = document.createElement('canvas');
-  canvas.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:30;';
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-  document.body.appendChild(canvas);
-  const ctx = canvas.getContext('2d');
-  const colors = ['#1a5c3a', '#1a4d73', '#eda100', '#e34948', '#4a3aa7'];
-  const pieces = Array.from({ length: 70 }, () => ({
-    x: Math.random() * canvas.width, y: -20 - Math.random() * canvas.height * 0.3,
-    size: 4 + Math.random() * 5, color: colors[Math.floor(Math.random() * colors.length)],
-    vy: 2 + Math.random() * 3, vx: (Math.random() - 0.5) * 2,
-    rot: Math.random() * Math.PI, vrot: (Math.random() - 0.5) * 0.3,
-  }));
-  const start = performance.now();
-  function frame(t) {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    for (const p of pieces) {
-      p.x += p.vx; p.y += p.vy; p.rot += p.vrot;
-      ctx.save();
-      ctx.translate(p.x, p.y);
-      ctx.rotate(p.rot);
-      ctx.fillStyle = p.color;
-      ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
-      ctx.restore();
-    }
-    if (t - start < 1800) requestAnimationFrame(frame);
-    else canvas.remove();
+let userId = getUserId();
+const authReady = bootstrapAuth().then((r) => {
+  userId = r.userId;
+  if (r.session) {
+    $('login-link').textContent = r.session.display_name || 'ログイン中';
+    $('login-link').href = 'mypage.html';
+  } else {
+    $('login-link').href = googleLoginUrl(userId);
   }
-  requestAnimationFrame(frame);
-}
-
-function playChime() {
-  try {
-    const Ctx = window.AudioContext || window.webkitAudioContext;
-    if (!Ctx) return;
-    const ctx = new Ctx();
-    [523.25, 659.25, 783.99].forEach((freq, i) => { // C5-E5-G5の軽い上昇アルペジオ
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.value = freq;
-      const t0 = ctx.currentTime + i * 0.1;
-      gain.gain.setValueAtTime(0.0001, t0);
-      gain.gain.exponentialRampToValueAtTime(0.2, t0 + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.3);
-      osc.connect(gain).connect(ctx.destination);
-      osc.start(t0);
-      osc.stop(t0 + 0.35);
-    });
-    setTimeout(() => ctx.close(), 800);
-  } catch { /* 音が鳴らなくても致命的ではない */ }
-}
-
-async function shareCard(level, emoji) {
-  const canvas = document.createElement('canvas');
-  canvas.width = 600; canvas.height = 700;
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#eef5f0';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.textAlign = 'center';
-  ctx.fillStyle = '#1a5c3a';
-  ctx.font = 'bold 32px sans-serif';
-  ctx.fillText('モリノミカタ', canvas.width / 2, 80);
-  ctx.font = '180px sans-serif';
-  ctx.fillText(emoji, canvas.width / 2, 380);
-  ctx.font = 'bold 48px sans-serif';
-  ctx.fillStyle = '#222';
-  ctx.fillText(`Lv.${level}`, canvas.width / 2, 470);
-  ctx.font = '20px sans-serif';
-  ctx.fillStyle = '#666';
-  ctx.fillText('外来種ヨソモンを見つけて相棒を育てよう', canvas.width / 2, 540);
-
-  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
-  if (!blob) return;
-  const file = new File([blob], 'monimikata.png', { type: 'image/png' });
-  if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    try {
-      await navigator.share({ files: [file], title: 'モリノミカタ', text: `Lv.${level}になりました!` });
-      return;
-    } catch { /* ユーザーがキャンセルした場合など。ダウンロードにフォールバック */ }
-  }
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = 'monimikata.png';
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-function showLevelUp(prevLevel, newLevel) {
-  const evolved = spriteForLevel(newLevel) !== spriteForLevel(prevLevel);
-  $('levelup-title').textContent = evolved ? '🎉 相棒が進化した!' : '🎉 レベルアップ!';
-  $('levelup-sprite').textContent = spriteForLevel(newLevel);
-  $('levelup-level').textContent = `Lv.${newLevel}`;
-  $('levelup-modal').hidden = false;
-  shareLevel = newLevel;
-  fireConfetti();
-  playChime();
-  vibrate([40, 30, 40, 30, 80]);
-}
-$('levelup-close').addEventListener('click', () => { $('levelup-modal').hidden = true; });
-$('levelup-modal').addEventListener('click', (e) => {
-  if (e.target === $('levelup-modal')) $('levelup-modal').hidden = true;
-});
-$('levelup-share').addEventListener('click', () => shareCard(shareLevel, spriteForLevel(shareLevel)));
-
-async function loadCharacter() {
-  try {
-    const res = await fetch(`/api/character?reporter_id=${reporterId}`);
-    const j = await res.json();
-    if (j.ok) renderCharacter(j);
-  } catch { /* キャラ表示だけなので失敗しても致命的ではない */ }
-}
-
-// セッション内でスキップした通報ID(直近20件まで)。次の候補取得で除外する。
-const skippedIds = [];
-
-async function loadNext() {
-  $('triage-card').hidden = true;
-  $('triage-status').textContent = '写真を探しています...';
-  const params = new URLSearchParams({ voter_id: reporterId });
-  if (skippedIds.length) params.set('exclude', skippedIds.slice(-20).join(','));
-  try {
-    const res = await fetch(`/api/triage/next?${params}`);
-    const j = await res.json();
-    if (!j.ok) { $('triage-status').textContent = j.error || '読み込みに失敗しました'; return; }
-    if (!j.report) {
-      $('triage-status').textContent = '今は判定待ちの写真がありません。また後で来てください!';
-      return;
-    }
-    $('triage-status').textContent = '';
-    $('triage-img').src = j.report.thumb_url;
-    $('triage-card').dataset.reportId = j.report.report_id;
-    $('triage-card').hidden = false;
-  } catch {
-    $('triage-status').textContent = '読み込みに失敗しました';
-  }
-}
-
-// サムネイルが読めない場合(対象がレビュー等で状態変化した等のTOCTOU)は自動で次へ。
-$('triage-img').addEventListener('error', () => { loadNext(); });
-
-function showXpToast(amount) {
-  const el = $('xp-toast');
-  el.textContent = `+${amount} XP`;
-  el.classList.remove('show');
-  void el.offsetWidth;
-  el.classList.add('show');
-  setTimeout(() => { el.classList.remove('show'); }, 1000);
-}
-
-document.querySelectorAll('.triage-buttons button[data-choice]').forEach((btn) => {
-  btn.addEventListener('click', async () => {
-    const reportId = $('triage-card').dataset.reportId;
-    if (!reportId) return;
-    document.querySelectorAll('.triage-buttons button').forEach((b) => { b.disabled = true; });
-
-    const choice = btn.dataset.choice;
-    if (choice === 'skip') {
-      skippedIds.push(reportId);
-    } else {
-      try {
-        await authReady;
-        const res = await fetch('/api/triage/vote', {
-          method: 'POST', headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ report_id: reportId, voter_id: reporterId, choice }),
-        });
-        const j = await res.json();
-        if (j.ok && j.awarded) {
-          showXpToast(2);
-          vibrate(20);
-          const prevLevel = lastLevel;
-          renderCharacter(j);
-          if (j.leveled_up) showLevelUp(prevLevel, j.level);
-        }
-      } catch { /* 失敗しても次の写真へは進む(ゲームの流れを止めない) */ }
-    }
-
-    await loadNext();
-    document.querySelectorAll('.triage-buttons button').forEach((b) => { b.disabled = false; });
-  });
 });
 
-$('start-btn').addEventListener('click', () => {
-  $('action-wrap').hidden = true;
-  $('triage-area').hidden = false;
-  loadNext();
-});
-$('triage-close').addEventListener('click', () => {
-  $('triage-area').hidden = true;
-  $('action-wrap').hidden = false;
-});
+fetch('/api/health').then((r) => r.json()).then((j) => {
+  if (!j.ok) return;
+  $('stat-posts').textContent = j.total;
+  $('stat-fixed').textContent = j.confirmed ?? 0;
+}).catch(() => {});
 
 authReady.then(() => {
-  $('login-link').href = googleLoginUrl(reporterId);
-  loadCharacter();
+  fetch(`/api/mypage?user_id=${userId}`).then((r) => r.json()).then((j) => {
+    if (j.ok) $('my-points-value').textContent = `${j.summary.points_total} pt / Lv.${j.summary.level}`;
+  }).catch(() => {});
 });
 </script>
 </body>

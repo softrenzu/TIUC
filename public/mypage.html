@@ -12,42 +12,28 @@
 
   #topbar { display: flex; align-items: center; justify-content: space-between; margin: 0 0 8px; }
   #topbar a { font-size: 12px; color: var(--muted); text-decoration: none; }
-  #buddy-badge { display: flex; align-items: center; gap: 4px; font-size: 12px;
-                 border: 1px solid var(--line); border-radius: var(--radius-pill);
-                 padding: 3px 10px 3px 6px; }
-  #buddy-emoji { font-size: 16px; }
-  #buddy-level { font-weight: 700; }
 
   h1 { font-size: 19px; margin: 0 0 4px; }
-  h2 { font-size: 15px; margin: 24px 0 8px; display: flex; align-items: baseline; gap: 8px; }
-  h2 .h2-sub { font-size: 12px; font-weight: 400; color: var(--muted); }
+  h2 { font-size: 15px; margin: 24px 0 8px; }
   .lead { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
   .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .stat { border: 1px solid var(--line); border-radius: var(--radius-card, 10px); padding: 12px; text-align: center; }
   .stat .n { font-size: 22px; font-weight: 600; }
   .stat .label { font-size: 12px; color: var(--muted); margin-top: 2px; }
-  .rank-row { display: flex; gap: 8px; margin-top: 8px; }
-  .rank-pill { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
-               border: 1px solid var(--line); border-radius: var(--radius-pill); padding: 8px 10px;
-               font-size: 13px; }
-  .rank-pill .n { font-weight: 700; }
   .card { border: 1px solid var(--line); border-radius: var(--radius-card, 10px); padding: 10px 12px; margin-bottom: 8px; }
   .card .row1 { display: flex; justify-content: space-between; align-items: center; font-size: 13px; gap: 8px; }
   .badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px;
            border: 1px solid var(--line); white-space: nowrap; }
-  .badge.ok   { border-color: var(--ok); color: var(--ok); }
-  .badge.warn { border-color: var(--warn); color: var(--warn); }
-  .badge.new  { border-color: var(--color-secondary, #1a4d73); color: var(--color-secondary, #1a4d73); }
-  .note { font-size: 12px; margin-top: 6px; background: #f2f6fb; border: 1px solid #cddbea;
-          border-radius: 8px; padding: 8px; }
+  .badge.pending_judgment { border-color: var(--color-secondary, #1a4d73); color: var(--color-secondary, #1a4d73); }
+  .badge.needs_fix        { border-color: var(--warn); color: var(--warn); }
+  .badge.looks_ok         { border-color: var(--muted); color: var(--muted); }
+  .badge.confirmed        { border-color: var(--ok); color: var(--ok); }
+  .badge.adopted          { border-color: var(--ok); color: #fff; background: var(--ok); }
   .memo { font-size: 12px; margin-top: 6px; color: var(--muted); }
   .ledger-row { display: flex; justify-content: space-between; align-items: baseline;
                 font-size: 13px; padding: 6px 0; border-bottom: 1px solid var(--line); gap: 8px; }
   .ledger-row:last-child { border-bottom: 0; }
-  .ledger-note { font-size: 12px; color: var(--muted); }
-  .delta { font-weight: 600; flex: none; }
-  .delta.plus  { color: var(--ok); }
-  .delta.minus { color: var(--warn); }
+  .delta { font-weight: 600; flex: none; color: var(--ok); }
   .empty { color: var(--muted); font-size: 13px; padding: 12px 0; }
   .empty-cta { text-align: center; border: 1px dashed var(--line); border-radius: var(--radius-card, 10px);
                padding: 22px 16px; }
@@ -59,35 +45,7 @@
   .warn { color: var(--warn); }
   .mono { font-family: ui-monospace, monospace; }
 
-  /* 図鑑 */
-  .zukan-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
-  .zukan-slot { aspect-ratio: 1/1; border: 1px solid var(--line); border-radius: var(--radius-sm, 8px);
-                display: flex; align-items: center; justify-content: center; font-size: 18px;
-                background: #f7f7f5; color: #ccc; }
-  .zukan-slot.filled { background: var(--color-accent-soft, #eef5f0); border-color: var(--color-accent, #1a5c3a);
-                        color: #222; }
-
-  /* クエスト */
-  .quest-card { display: flex; align-items: center; gap: 10px; }
-  .quest-body { flex: 1; min-width: 0; }
-  .quest-title { font-size: 13px; font-weight: 600; }
-  .quest-desc { font-size: 11px; color: var(--muted); }
-  .quest-reward { font-size: 11px; color: var(--color-accent, #1a5c3a); margin-top: 2px; }
-  .quest-card.done { opacity: .6; }
-  .quest-claim { flex: none; padding: 8px 12px; font-size: 12px; border-radius: var(--radius-pill);
-                 border: 1px solid var(--color-accent, #1a5c3a); background: #fff;
-                 color: var(--color-accent, #1a5c3a); cursor: pointer; white-space: nowrap; }
-  .quest-claim:disabled { border-color: var(--line); color: var(--muted); cursor: default; }
-  .quest-claim.ready { background: var(--color-accent, #1a5c3a); color: #fff; }
-
-  /* 地域インパクト */
-  .impact-card { display: flex; gap: 8px; }
-  .impact-tile { flex: 1; text-align: center; border: 1px solid var(--line);
-                 border-radius: var(--radius-card, 10px); padding: 12px 6px; }
-  .impact-tile .n { font-size: 20px; font-weight: 600; }
-  .impact-tile .label { font-size: 11px; color: var(--muted); margin-top: 2px; }
-
-  #reports .card { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  #posts .card { cursor: pointer; -webkit-tap-highlight-color: transparent; }
   .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex;
                      align-items: center; justify-content: center; padding: 16px; z-index: 10; }
   .modal-backdrop[hidden] { display: none; }
@@ -105,37 +63,21 @@
   .detail-actions button { flex: 1; padding: 9px; font-size: 13px; border: 1px solid var(--line);
                             border-radius: 8px; background: #fff; cursor: pointer; }
   .detail-actions button.danger { color: var(--warn); border-color: var(--warn); }
-  .detail-edit label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 3px; }
-  .detail-edit select, .detail-edit textarea { width: 100%; font-size: 14px; padding: 7px;
-                                                border: 1px solid var(--line); border-radius: 6px;
-                                                font-family: inherit; }
   .detail-msg { font-size: 12px; margin-top: 8px; min-height: 1.2em; }
 </style>
 <body>
 
 <div id="topbar">
-  <a href="/">← モリノミカタに戻る</a>
-  <div id="buddy-badge"><span id="buddy-emoji">🥚</span><span id="buddy-level">Lv.1</span></div>
+  <a href="/">← トップ</a>
+  <a id="login-link" href="#">ログイン</a>
 </div>
 <h1>マイページ</h1>
-<p class="lead">これまでの記録と、育てている相棒の成長です。</p>
-
-<div id="account" class="card" style="margin-bottom:16px"></div>
+<p class="lead">これまでの貢献とポイントです。</p>
 
 <div class="stats" id="stats"></div>
-<div class="rank-row" id="rank-row"></div>
 
-<h2>図鑑 <span class="h2-sub" id="zukan-count"></span></h2>
-<div id="zukan"></div>
-
-<h2>クエスト</h2>
-<div id="quests"></div>
-
-<h2>地域のようす</h2>
-<div id="impact"></div>
-
-<h2>通報履歴</h2>
-<div id="reports"></div>
+<h2>投稿履歴</h2>
+<div id="posts"></div>
 
 <h2>ポイント履歴</h2>
 <div id="ledger"></div>
@@ -145,395 +87,149 @@
 <div id="detail-modal" class="modal-backdrop" hidden>
   <div class="modal-card">
     <button type="button" id="detail-close" class="modal-close" aria-label="閉じる">×</button>
-    <img id="detail-img" alt="通報時の写真">
+    <img id="detail-img" alt="投稿時の写真">
     <div id="detail-body"></div>
   </div>
 </div>
 
 <script type="module">
-import { getReporterId, bootstrapAuth, googleLoginUrl, setReporterId } from './auth.js';
+import { getUserId, bootstrapAuth, googleLoginUrl } from './auth.js';
 
 const $ = (id) => document.getElementById(id);
+let userId = getUserId();
+let posts = [];
 
-// --- 通報者ID(他ページと同じキーで匿名・端末保存) ------------------------
-let reporterId = getReporterId();
-let authSession = null;
-const authReady = bootstrapAuth().then((r) => {
-  reporterId = r.reporterId;
-  authSession = r.session;
-});
-
-// --- 表示ラベル(review.html / map.html と共通の語彙) -------------------
-const FINDING = { frass: 'フラス', adult_alive: '成虫(生)', adult_dead: '成虫(死)',
-                   exit_hole: '脱出孔', none: '異常なし' };
-const SPECIES = { sakura: 'サクラ', ume: 'ウメ', momo: 'モモ', sumomo: 'スモモ',
-                   other_rosaceae: 'その他バラ科', non_rosaceae: 'バラ科以外', unknown: '不明' };
 const STATUS_LABEL = {
-  queued: '判定待ち', auto_rejected: '自動除外', pending_review: '確認中',
-  provisional: '暫定表示中', confirmed: '被害確定', rejected: '該当なし', duplicate: '重複',
+  pending_judgment: '判定待ち', needs_fix: '修正待ち', looks_ok: '問題なし(確認済み)',
+  confirmed: '修正確定', adopted: '店が採用',
 };
-const STATUS_CLASS = {
-  confirmed: 'ok', rejected: 'warn', auto_rejected: 'warn', duplicate: 'warn',
+const LANG_LABEL = { 'ja-en': '日→英', 'ja-zh': '日→中', 'ja-ko': '日→韓' };
+const jst = (t) => t ? new Date(t * 1000).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : '—';
+
+const POINT_LABEL = {
+  post_submit: '投稿', judgment: '違和感チェック', correction_propose: '修正提案',
+  correction_confirm_bonus: '修正案が確定', vote: '投票', adopt_bonus: '店に採用', revoke: '取り消し', manual: '運営調整',
 };
-const RESPONSE_LABEL = { scheduled: '対応予定', treating: '対応中', done: '対応済み' };
-const KIND_LABEL = {
-  submit: '通報受付', confirm_bonus: '確定ボーナス', new_mesh_bonus: '新エリアボーナス',
-  negative_survey: '異常なし報告', duplicate_penalty: '重複調整',
-  revoke: '取り消し', manual: '手動調整',
-};
-const FINDING_ICON = { frass: '🪵', adult_alive: '🐛', adult_dead: '💀', exit_hole: '🕳️' };
 
-const jst = (t) => t ? new Date(t * 1000).toLocaleDateString('ja-JP',
-  { timeZone: 'Asia/Tokyo', year: 'numeric', month: 'numeric', day: 'numeric' }) : '—';
+async function load() {
+  $('page-status').textContent = '読み込み中...';
+  const r = await bootstrapAuth();
+  userId = r.userId;
+  if (r.session) {
+    $('login-link').textContent = r.session.display_name || 'ログイン中';
+    $('login-link').removeAttribute('href');
+  } else {
+    $('login-link').href = googleLoginUrl(userId);
+  }
 
-function escapeHtml(s) {
-  return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-}
-
-// --- 相棒バッジ(常駐。report.html と同じ暫定ビジュアル) -------------------
-const LEVEL_SPRITES = [
-  { min: 1, max: 2, emoji: '🥚' },
-  { min: 3, max: 5, emoji: '🐣' },
-  { min: 6, max: 9, emoji: '🐦' },
-  { min: 10, max: Infinity, emoji: '🦅' },
-];
-function spriteForLevel(level) {
-  return (LEVEL_SPRITES.find((s) => level >= s.min && level <= s.max) || LEVEL_SPRITES[0]).emoji;
-}
-async function loadBuddyBadge() {
   try {
-    const res = await fetch(`/api/character?reporter_id=${reporterId}`);
+    const res = await fetch(`/api/mypage?user_id=${userId}`);
     const j = await res.json();
-    if (j.ok) {
-      $('buddy-emoji').textContent = spriteForLevel(j.level);
-      $('buddy-level').textContent = `Lv.${j.level}`;
-    }
-  } catch { /* バッジだけなので失敗しても致命的ではない */ }
+    if (!j.ok) throw new Error(j.error || '取得に失敗しました');
+    $('page-status').textContent = '';
+    renderStats(j.summary);
+    renderPosts(j.posts);
+    renderLedger(j.point_events);
+  } catch (e) {
+    $('page-status').innerHTML = `<span class="warn">${e.message}</span>`;
+  }
 }
 
 function renderStats(s) {
   $('stats').innerHTML = `
-    <div class="stat"><div class="n">${s.points_total}</div><div class="label">合計ポイント</div></div>
-    <div class="stat"><div class="n">${s.submitted_count}</div><div class="label">通報数</div></div>
-    <div class="stat"><div class="n">${s.confirmed_count}</div><div class="label">被害確定</div></div>
-    <div class="stat"><div class="n">${s.rejected_count}</div><div class="label">該当なし</div></div>`;
-  $('rank-row').innerHTML = `
-    <div class="rank-pill">🏅 ハンターランク <span class="n">${escapeHtml(s.hunter_rank)}</span></div>
-    <div class="rank-pill">🔥 定点観測 <span class="n">${s.streak_count}</span>連続</div>`;
+    <div class="stat"><div class="n">${s.points_total}</div><div class="label">ポイント (Lv.${s.level})</div></div>
+    <div class="stat"><div class="n">${s.post_count}</div><div class="label">投稿</div></div>
+    <div class="stat"><div class="n">${s.judged_count}</div><div class="label">違和感チェック</div></div>
+    <div class="stat"><div class="n">${s.corrected_count}</div><div class="label">修正提案</div></div>`;
 }
 
-function emptyCta(icon, text, linkText) {
-  return `<div class="empty-cta">
-    <div class="icon">${icon}</div>
-    <p>${text}</p>
-    <a href="report.html">${linkText}</a>
-  </div>`;
-}
-
-let currentReports = [];
-function renderReports(items) {
-  currentReports = items;
-  if (!items.length) {
-    $('reports').innerHTML = emptyCta('📷', 'まだ記録がありません。最初の一件を送ってみましょう。',
-      'ヨソモンを記録する');
+function renderPosts(list) {
+  posts = list;
+  const el = $('posts');
+  if (!list.length) {
+    el.innerHTML = `<div class="empty-cta">
+      <p class="icon">📷</p>
+      <p>まだ投稿がありません。街で見かけた外国語表記を撮ってみましょう。</p>
+      <a href="report.html">投稿する</a>
+    </div>`;
     return;
   }
-  const now = Math.floor(Date.now() / 1000);
-  $('reports').innerHTML = items.map((r) => {
-    const badgeClass = STATUS_CLASS[r.status] || '';
-    const respLabel = r.response_status ? RESPONSE_LABEL[r.response_status] : null;
-    const updated = r.response_updated_at && (now - r.response_updated_at) < 30 * 86400;
-    return `
-    <div class="card" data-id="${r.id}">
+  el.innerHTML = list.map((p) => `
+    <div class="card" data-id="${p.id}">
       <div class="row1">
-        <span>${FINDING[r.finding] || r.finding} / ${SPECIES[r.tree_species] || '—'}</span>
-        <span style="display:flex;gap:4px;align-items:center">
-          ${updated ? '<span class="badge new">🔔 更新あり</span>' : ''}
-          <span class="badge ${badgeClass}">${STATUS_LABEL[r.status] || r.status}</span>
-        </span>
+        <span>${LANG_LABEL[p.lang_pair] || p.lang_pair} ・ ${jst(p.created_at)}</span>
+        <span class="badge ${p.status}">${STATUS_LABEL[p.status] || p.status}</span>
       </div>
-      <div class="status">${jst(r.observed_at || r.created_at)}${respLabel ? ` ・ ${respLabel}` : ''}</div>
-      ${r.note ? `<div class="memo">${escapeHtml(r.note)}</div>` : ''}
-      ${r.response_note ? `<div class="note">${escapeHtml(r.response_note)}</div>` : ''}
-    </div>`;
-  }).join('');
+      ${p.situation ? `<p class="memo">${escapeHtml(p.situation)}</p>` : ''}
+    </div>
+  `).join('');
+  el.querySelectorAll('.card').forEach((card) => {
+    card.addEventListener('click', () => openDetail(card.dataset.id));
+  });
 }
 
-// --- 図鑑 --------------------------------------------------------------
-async function loadZukan() {
-  try {
-    const res = await fetch(`/api/encyclopedia?reporter_id=${reporterId}`);
-    const j = await res.json();
-    if (!j.ok) return;
-    $('zukan-count').textContent = `${j.count} / ${j.total}`;
-    $('zukan').innerHTML = `<div class="zukan-grid">${j.slots.map((s) => `
-      <div class="zukan-slot ${s.filled ? 'filled' : ''}"
-           title="${FINDING[s.finding] || s.finding} / ${SPECIES[s.tree_species] || s.tree_species}">
-        ${s.filled ? (FINDING_ICON[s.finding] || '✅') : '?'}
-      </div>`).join('')}</div>`;
-  } catch {
-    $('zukan').innerHTML = '<p class="empty">図鑑を読み込めませんでした。</p>';
-  }
+function renderLedger(events) {
+  const el = $('ledger');
+  if (!events.length) { el.innerHTML = '<p class="empty">まだ履歴がありません。</p>'; return; }
+  el.innerHTML = events.map((e) => `
+    <div class="ledger-row">
+      <span>${POINT_LABEL[e.kind] || e.kind} ・ ${jst(e.created_at)}</span>
+      <span class="delta">+${e.points}</span>
+    </div>
+  `).join('');
 }
 
-// --- クエスト ------------------------------------------------------------
-async function loadQuests() {
-  try {
-    const res = await fetch(`/api/quests?reporter_id=${reporterId}`);
-    const j = await res.json();
-    if (!j.ok) return;
-    if (!j.quests.length) { $('quests').innerHTML = '<p class="empty">クエストがありません。</p>'; return; }
-    $('quests').innerHTML = j.quests.map((q) => {
-      const locked = q.seasonal && !q.active;
-      let btnLabel = '未達成', btnClass = '', disabled = true;
-      if (q.claimed) { btnLabel = '受取済み'; }
-      else if (locked) { btnLabel = '期間外'; }
-      else if (q.achieved) { btnLabel = '受け取る'; btnClass = 'ready'; disabled = false; }
-      return `
-      <div class="card quest-card ${q.claimed ? 'done' : ''}">
-        <div class="quest-body">
-          <div class="quest-title">${escapeHtml(q.title)}${q.seasonal ? ' 🌞' : ''}</div>
-          <div class="quest-desc">${escapeHtml(q.desc)}</div>
-          <div class="quest-reward">+${q.reward} XP</div>
-        </div>
-        <button type="button" class="quest-claim ${btnClass}" data-quest="${q.id}" ${disabled ? 'disabled' : ''}>${btnLabel}</button>
-      </div>`;
-    }).join('');
-    $('quests').querySelectorAll('.quest-claim.ready').forEach((btn) => {
-      btn.addEventListener('click', () => claimQuest(btn.dataset.quest, btn));
-    });
-  } catch {
-    $('quests').innerHTML = '<p class="empty">クエストを読み込めませんでした。</p>';
-  }
-}
-
-async function claimQuest(questId, btn) {
-  btn.disabled = true;
-  btn.textContent = '受取中...';
-  try {
-    const res = await fetch('/api/quests/claim', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ reporter_id: reporterId, quest_id: questId }),
-    });
-    const j = await res.json();
-    if (!j.ok || !j.awarded) throw new Error(j.error || '受け取れませんでした');
-    await loadQuests();
-    await loadBuddyBadge();
-    const summary = await fetch(`/api/mypage?reporter_id=${reporterId}`).then((r) => r.json());
-    if (summary.ok) renderStats(summary.summary);
-  } catch (e) {
-    btn.disabled = false;
-    btn.textContent = e.message;
-  }
-}
-
-// --- 地域のようす --------------------------------------------------------
-async function loadImpact() {
-  try {
-    const res = await fetch(`/api/impact?reporter_id=${reporterId}`);
-    const j = await res.json();
-    if (!j.ok) return;
-    if (!j.available) {
-      $('impact').innerHTML = emptyCta('🗾', '通報すると、その地域のようすがここに表示されます。',
-        'ヨソモンを記録する');
-      return;
-    }
-    $('impact').innerHTML = `
-      <div class="impact-card">
-        <div class="impact-tile"><div class="n">${j.month_total}</div><div class="label">今月の記録件数</div></div>
-        <div class="impact-tile"><div class="n">${j.month_confirmed}</div><div class="label">うち被害確定</div></div>
-        <div class="impact-tile"><div class="n">${j.rank ?? '—'} / ${j.participants}</div><div class="label">このエリアでの順位</div></div>
-      </div>
-      <p class="status" style="margin-top:6px">あなたの周辺(約1kmメッシュ)の今月の集計です。</p>`;
-  } catch {
-    $('impact').innerHTML = '<p class="empty">地域のようすを読み込めませんでした。</p>';
-  }
-}
-
-// --- 通報詳細(タップで開く。写真は本人限定の /img/ アクセス経路を使う) ------------
-// レビュー前(=まだ人が判定していない)通報だけ、本人による削除・軽い修正を許可する。
-// src/index.js の UNREVIEWED_STATUSES と同じ集合。
-const UNREVIEWED_STATUSES = new Set(['queued', 'auto_rejected', 'pending_review', 'provisional']);
-const LAND_TYPE_LABEL = { public: '公有地', private: '私有地' };
-
-let currentDetail = null;
-
-function renderDetailView(r) {
-  const respLabel = r.response_status ? RESPONSE_LABEL[r.response_status] : null;
-  const editable = UNREVIEWED_STATUSES.has(r.status);
+function openDetail(id) {
+  const p = posts.find((x) => x.id === id);
+  if (!p) return;
+  $('detail-img').src = `/img/${p.src_thumb_key}?user_id=${encodeURIComponent(userId)}`;
   $('detail-body').innerHTML = `
-    <div class="detail-row"><span>発見物</span><span>${FINDING[r.finding] || r.finding}</span></div>
-    <div class="detail-row"><span>樹種</span><span>${SPECIES[r.tree_species] || '—'}</span></div>
-    <div class="detail-row"><span>日時</span><span>${jst(r.observed_at || r.created_at)}</span></div>
-    <div class="detail-row"><span>状態</span><span>${STATUS_LABEL[r.status] || r.status}</span></div>
-    ${respLabel ? `<div class="detail-row"><span>対応状況</span><span>${respLabel}</span></div>` : ''}
-    ${LAND_TYPE_LABEL[r.land_type] ? `<div class="detail-row"><span>土地</span><span>${LAND_TYPE_LABEL[r.land_type]}</span></div>` : ''}
-    ${r.note ? `<div class="memo" style="margin-top:8px">${escapeHtml(r.note)}</div>` : ''}
-    ${r.response_note ? `<div class="note" style="margin-top:8px">${escapeHtml(r.response_note)}</div>` : ''}
-    ${editable ? `
+    <div class="detail-row"><span>言語</span><span>${LANG_LABEL[p.lang_pair] || p.lang_pair}</span></div>
+    <div class="detail-row"><span>状態</span><span>${STATUS_LABEL[p.status] || p.status}</span></div>
+    <div class="detail-row"><span>原文</span><span>${escapeHtml(p.original_text || '—')}</span></div>
+    <div class="detail-row"><span>訳文</span><span>${escapeHtml(p.translated_text || '—')}</span></div>
+    <div class="detail-row"><span>投稿日</span><span>${jst(p.created_at)}</span></div>
+    ${p.situation ? `<div class="detail-row"><span>メモ</span><span>${escapeHtml(p.situation)}</span></div>` : ''}
+    ${p.status === 'pending_judgment' ? `
       <div class="detail-actions">
-        <button type="button" id="detail-edit-btn">編集する</button>
-        <button type="button" id="detail-delete-btn" class="danger">削除する</button>
+        <button type="button" class="danger" id="detail-delete">削除する</button>
       </div>
       <p class="detail-msg" id="detail-msg"></p>
     ` : ''}
   `;
-  if (editable) {
-    $('detail-edit-btn').addEventListener('click', () => renderDetailEdit(r));
-    $('detail-delete-btn').addEventListener('click', () => handleDelete(r));
-  }
-}
-
-function optionsHtml(dict, selected) {
-  return Object.entries(dict).map(([value, label]) =>
-    `<option value="${value}" ${value === selected ? 'selected' : ''}>${label}</option>`
-  ).join('');
-}
-
-function renderDetailEdit(r) {
-  $('detail-body').innerHTML = `
-    <div class="detail-edit">
-      <label for="edit-finding">発見物</label>
-      <select id="edit-finding">${optionsHtml(FINDING, r.finding)}</select>
-      <label for="edit-species">樹種</label>
-      <select id="edit-species">${optionsHtml(SPECIES, r.tree_species)}</select>
-      <label for="edit-note">メモ</label>
-      <textarea id="edit-note" rows="3" maxlength="500">${escapeHtml(r.note || '')}</textarea>
-      <div class="detail-actions">
-        <button type="button" id="edit-cancel">キャンセル</button>
-        <button type="button" id="edit-save">保存する</button>
-      </div>
-      <p class="detail-msg" id="detail-msg"></p>
-    </div>
-  `;
-  $('edit-cancel').addEventListener('click', () => renderDetailView(r));
-  $('edit-save').addEventListener('click', () => handleSave(r));
-}
-
-async function handleSave(r) {
-  const msg = $('detail-msg');
-  msg.textContent = '保存中...';
-  try {
-    const res = await fetch('/api/reports/edit', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        report_id: r.id, reporter_id: reporterId,
-        finding: $('edit-finding').value,
-        tree_species: $('edit-species').value,
-        note: $('edit-note').value,
-      }),
-    });
-    const j = await res.json();
-    if (!j.ok) throw new Error(j.error || '保存に失敗しました');
-    closeDetail();
-    await main();
-  } catch (e) {
-    msg.textContent = e.message;
-    msg.className = 'detail-msg warn';
-  }
-}
-
-async function handleDelete(r) {
-  if (!confirm('この通報を削除しますか?元に戻せません。')) return;
-  const msg = $('detail-msg');
-  msg.textContent = '削除中...';
-  try {
-    const res = await fetch('/api/reports/delete', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ report_id: r.id, reporter_id: reporterId }),
-    });
-    const j = await res.json();
-    if (!j.ok) throw new Error(j.error || '削除に失敗しました');
-    closeDetail();
-    await main();
-  } catch (e) {
-    msg.textContent = e.message;
-    msg.className = 'detail-msg warn';
-  }
-}
-
-function openDetail(r) {
-  currentDetail = r;
-  $('detail-img').src = `/img/${r.thumb_key}?reporter_id=${encodeURIComponent(reporterId)}`;
-  renderDetailView(r);
   $('detail-modal').hidden = false;
-}
-function closeDetail() { $('detail-modal').hidden = true; currentDetail = null; }
 
-$('reports').addEventListener('click', (e) => {
-  const card = e.target.closest('.card[data-id]');
-  if (!card) return;
-  const r = currentReports.find((x) => x.id === card.dataset.id);
-  if (r) openDetail(r);
-});
-$('detail-close').addEventListener('click', closeDetail);
-$('detail-modal').addEventListener('click', (e) => {
-  if (e.target === $('detail-modal')) closeDetail();
-});
-
-function renderLedger(items) {
-  if (!items.length) {
-    $('ledger').innerHTML = '<p class="empty">通報するとここにポイント履歴が記録されます。</p>';
-    return;
-  }
-  $('ledger').innerHTML = items.map((e) => {
-    const sign = e.points > 0 ? '+' : '';
-    const cls = e.points > 0 ? 'plus' : (e.points < 0 ? 'minus' : '');
-    return `
-    <div class="ledger-row">
-      <span>${jst(e.created_at)} ${KIND_LABEL[e.kind] || e.kind}
-        ${e.note ? `<div class="ledger-note">${escapeHtml(e.note)}</div>` : ''}</span>
-      <span class="mono delta ${cls}">${sign}${e.points}</span>
-    </div>`;
-  }).join('');
-}
-
-function renderAccount() {
-  const el = $('account');
-  if (authSession) {
-    const label = authSession.display_name || authSession.email || 'ログイン中';
-    el.innerHTML = `<div class="row1"><span>ログイン中: ${escapeHtml(label)}</span>
-      <a href="#" id="logout-link">ログアウト</a></div>
-      <p class="memo">この端末はGoogleアカウントに連携済みです。他の端末でも同じアカウントで
-      ログインすると通報履歴が引き継がれます。</p>`;
-    $('logout-link').addEventListener('click', async (e) => {
-      e.preventDefault();
-      await fetch('/api/auth/logout');
-      // ログアウト後もこの端末は同じ reporter_id を覚えているので、明示的に
-      // 新しい匿名IDへ切り替えないと体感上「ログアウトした」ことにならない。
-      reporterId = crypto.randomUUID();
-      setReporterId(reporterId);
-      authSession = null;
-      renderAccount();
-      main().catch((e2) => { $('page-status').innerHTML = `<span class="warn">${e2.message}</span>`; });
+  const delBtn = document.getElementById('detail-delete');
+  if (delBtn) {
+    delBtn.addEventListener('click', async () => {
+      delBtn.disabled = true;
+      const msg = document.getElementById('detail-msg');
+      msg.textContent = '削除中...';
+      try {
+        const res = await fetch('/api/posts/delete', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ user_id: userId, post_id: p.id }),
+        });
+        const j = await res.json();
+        if (!j.ok) throw new Error(j.error);
+        $('detail-modal').hidden = true;
+        load();
+      } catch (e) {
+        msg.innerHTML = `<span class="warn">${e.message}</span>`;
+        delBtn.disabled = false;
+      }
     });
-  } else {
-    el.innerHTML = `<a href="${googleLoginUrl(reporterId)}">Googleでログインして複数端末で同期する</a>`;
   }
 }
 
-async function main() {
-  $('page-status').textContent = '読み込み中...';
-  const res = await fetch(`/api/mypage?reporter_id=${reporterId}`);
-  const j = await res.json();
-  if (!j.ok) throw new Error(j.error || '取得に失敗しました');
-  $('page-status').textContent = '';
-  renderStats(j.summary);
-  renderReports(j.reports);
-  renderLedger(j.point_events);
-  loadZukan();
-  loadQuests();
-  loadImpact();
-  loadBuddyBadge();
+$('detail-close').addEventListener('click', () => { $('detail-modal').hidden = true; });
+$('detail-modal').addEventListener('click', (e) => { if (e.target === $('detail-modal')) $('detail-modal').hidden = true; });
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
 
-$('page-status').textContent = '読み込み中...';
-authReady.then(() => {
-  renderAccount();
-  main().catch((e) => {
-    $('page-status').innerHTML = `<span class="warn">${e.message}</span>`;
-  });
-});
+load();
 </script>
 </body>
 </html>

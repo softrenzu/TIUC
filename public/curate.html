@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="ja">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>修正・投票 - TIUC</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  :root { --line:#ddd; --muted:#666; --warn:#a33; --ok:#161; }
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, sans-serif; margin: 0 auto; padding: 16px;
+         max-width: 480px; line-height: 1.6; color: #222; }
+  #topbar { display: flex; align-items: center; justify-content: space-between; margin: 0 0 8px; }
+  #topbar a { font-size: 12px; color: var(--muted); text-decoration: none; }
+  #points-badge { font-size: 12px; border: 1px solid var(--line); border-radius: var(--radius-pill); padding: 3px 10px; }
+  h1 { font-size: 19px; margin: 0 0 4px; }
+  .lead { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
+
+  .row-select { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+  .row-select button { flex: 1; padding: 9px; font-size: 12px; border: 1px solid var(--line);
+                        border-radius: var(--radius-sm); background: #fff; cursor: pointer; white-space: nowrap; }
+  .row-select button.active { background: var(--color-accent, #1a5c3a); color: #fff; border-color: var(--color-accent, #1a5c3a); }
+  #tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+  #tabs button { flex: 1; padding: 10px; font-size: 13px; border: 1px solid var(--line);
+                 border-radius: var(--radius-sm); background: #fff; cursor: pointer; }
+  #tabs button.active { background: #222; color: #fff; border-color: #222; }
+
+  .panel[hidden] { display: none; }
+  #card, #vote-card { border: 1px solid var(--line); border-radius: var(--radius-card, 16px); padding: 16px; }
+  #card[hidden], #vote-card[hidden] { display: none; }
+  .imgs { display: flex; gap: 8px; }
+  .imgs > div { flex: 1; }
+  .imgs img { width: 100%; max-height: 240px; object-fit: contain; border-radius: 10px; background: #f2f2f0; display: block; }
+  .imgs .cap { font-size: 11px; color: var(--muted); text-align: center; margin-top: 4px; }
+  .meta { font-size: 12px; color: var(--muted); margin: 10px 0; }
+
+  label.field { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 3px; }
+  input[type=text], textarea { width: 100%; font-size: 14px; padding: 8px; border: 1px solid var(--line);
+                                border-radius: 8px; font-family: inherit; }
+  .verdict-row { display: flex; gap: 8px; margin: 10px 0; }
+  .verdict-row label { flex: 1; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px;
+                        text-align: center; font-size: 13px; cursor: pointer; position: relative; }
+  .verdict-row input { position: absolute; opacity: 0; }
+  .verdict-row label:has(input:checked) { border-color: #222; border-width: 2px; background: #f4f4f2; font-weight: 600; }
+  #submit-fix { width: 100%; margin-top: 12px; padding: 12px; font-size: 15px; border: 0;
+                border-radius: 10px; background: var(--color-accent, #1a5c3a); color: #fff; }
+  #submit-fix:disabled { background: #bbb; }
+
+  .fixed-box { background: #eef5f0; border: 1px solid #cfe3d8; border-radius: 8px; padding: 10px; margin: 10px 0; font-size: 14px; }
+  .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+  .btns button { padding: 16px 8px; font-size: 14px; font-weight: 600; border-radius: var(--radius-card, 12px);
+                 border: 2px solid var(--line); background: #fff; cursor: pointer; }
+  .btns button.agree { border-color: var(--ok); color: var(--ok); }
+  .btns button.disagree { border-color: var(--warn); color: var(--warn); }
+
+  #empty { text-align: center; padding: 40px 16px; color: var(--muted); }
+  #empty .icon { font-size: 40px; }
+  .status { font-size: 13px; color: var(--muted); margin-top: 10px; text-align: center; }
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+           background: #222; color: #fff; padding: 10px 20px; border-radius: 999px;
+           font-size: 13px; opacity: 0; transition: opacity .2s ease; pointer-events: none; }
+  .toast.show { opacity: 1; }
+</style>
+<body>
+
+<div id="topbar">
+  <a href="menu.html">← キュレーション</a>
+  <div id="points-badge">0 pt</div>
+</div>
+<h1>✏️ 修正・投票</h1>
+<p class="lead">バイリンガル向けサブモード。正しい訳を提案するか、他の人の提案に投票してください。</p>
+
+<div class="row-select" id="lang-select">
+  <button type="button" data-lang="ja-en" class="active">→英語</button>
+  <button type="button" data-lang="ja-zh">→中国語</button>
+  <button type="button" data-lang="ja-ko">→韓国語</button>
+</div>
+
+<div id="tabs">
+  <button type="button" id="tab-fix" class="active">修正する</button>
+  <button type="button" id="tab-vote">投票する</button>
+</div>
+
+<div class="panel" id="panel-fix">
+  <div id="card" hidden>
+    <div class="imgs" id="fix-imgs"></div>
+    <p class="meta" id="fix-meta"></p>
+    <div class="verdict-row">
+      <label><input type="radio" name="verdict" value="fix" checked>修正が必要</label>
+      <label><input type="radio" name="verdict" value="no_issue">実は問題なし</label>
+    </div>
+    <div id="fix-fields">
+      <label class="field" for="original-text">原文(読み取れた日本語)</label>
+      <input type="text" id="original-text" maxlength="500">
+      <label class="field" for="translated-text">現在の訳文</label>
+      <input type="text" id="translated-text" maxlength="500">
+      <label class="field" for="fixed-text">修正後の訳文</label>
+      <input type="text" id="fixed-text" maxlength="500">
+      <label class="field" for="explanation">なぜ変か(任意)</label>
+      <textarea id="explanation" rows="2" maxlength="500"></textarea>
+    </div>
+    <button type="button" id="submit-fix">この内容で提案する</button>
+  </div>
+  <div id="empty-fix" class="panel" hidden>
+    <div id="empty"><p class="icon">🎉</p><p>今この言語ペアで修正待ちの投稿はありません。</p></div>
+  </div>
+</div>
+
+<div class="panel" id="panel-vote" hidden>
+  <div id="vote-card" hidden>
+    <div class="imgs" id="vote-imgs"></div>
+    <p class="meta" id="vote-meta"></p>
+    <p class="fixed-box" id="vote-fixed"></p>
+    <div class="btns">
+      <button type="button" class="disagree" id="btn-disagree">👎 賛成しない</button>
+      <button type="button" class="agree" id="btn-agree">👍 賛成</button>
+    </div>
+  </div>
+  <div id="empty-vote" hidden><div id="empty"><p class="icon">🎉</p><p>今この言語ペアで投票できる提案はありません。</p></div></div>
+</div>
+
+<p class="status" id="status"></p>
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import { getUserId, bootstrapAuth } from './auth.js';
+
+let userId = getUserId();
+const authReady = bootstrapAuth().then((r) => { userId = r.userId; });
+const $ = (id) => document.getElementById(id);
+
+let langPair = 'ja-en';
+let mode = 'fix';
+let currentPost = null;
+let currentCorrection = null;
+
+async function loadPointsBadge() {
+  try {
+    const res = await fetch(`/api/mypage?user_id=${userId}`);
+    const j = await res.json();
+    if (j.ok) $('points-badge').textContent = `${j.summary.points_total} pt / Lv.${j.summary.level}`;
+  } catch { /* バッジのみ */ }
+}
+function showToast(text) {
+  const t = $('toast');
+  t.textContent = text;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1400);
+}
+
+document.querySelectorAll('#lang-select button').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#lang-select button').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    langPair = btn.dataset.lang;
+    refreshCurrent();
+  });
+});
+
+$('tab-fix').addEventListener('click', () => setMode('fix'));
+$('tab-vote').addEventListener('click', () => setMode('vote'));
+function setMode(m) {
+  mode = m;
+  $('tab-fix').classList.toggle('active', m === 'fix');
+  $('tab-vote').classList.toggle('active', m === 'vote');
+  $('panel-fix').hidden = m !== 'fix';
+  $('panel-vote').hidden = m !== 'vote';
+  refreshCurrent();
+}
+
+document.querySelectorAll('input[name=verdict]').forEach((r) => {
+  r.addEventListener('change', () => {
+    $('fix-fields').style.display = document.querySelector('input[name=verdict]:checked').value === 'fix' ? 'block' : 'none';
+  });
+});
+
+async function refreshCurrent() {
+  $('status').textContent = '';
+  if (mode === 'fix') loadFixNext(); else loadVoteNext();
+}
+
+async function loadFixNext() {
+  $('card').hidden = true; $('empty-fix').hidden = true;
+  $('status').textContent = '読み込み中...';
+  await authReady;
+  try {
+    const res = await fetch(`/api/correct/next?${new URLSearchParams({ user_id: userId, lang_pair: langPair })}`);
+    const j = await res.json();
+    if (!j.ok) throw new Error(j.error);
+    $('status').textContent = '';
+    if (!j.post) { $('empty-fix').hidden = false; currentPost = null; return; }
+    currentPost = j.post;
+    $('fix-imgs').innerHTML =
+      `<div><img src="${currentPost.src_image_url}" alt="原文"><p class="cap">原文</p></div>` +
+      (currentPost.tgt_image_url ? `<div><img src="${currentPost.tgt_image_url}" alt="訳文"><p class="cap">訳文</p></div>` : '');
+    $('fix-meta').textContent = currentPost.situation ? `メモ: ${currentPost.situation}` : '';
+    $('original-text').value = currentPost.original_text || '';
+    $('translated-text').value = currentPost.translated_text || '';
+    $('fixed-text').value = '';
+    $('explanation').value = '';
+    document.querySelector('input[name=verdict][value=fix]').checked = true;
+    $('fix-fields').style.display = 'block';
+    $('card').hidden = false;
+  } catch (e) { $('status').textContent = e.message; }
+}
+
+$('submit-fix').addEventListener('click', async () => {
+  if (!currentPost) return;
+  const verdict = document.querySelector('input[name=verdict]:checked').value;
+  if (verdict === 'fix' && !$('fixed-text').value.trim()) {
+    $('status').textContent = '修正後の訳文を入力してください';
+    return;
+  }
+  $('submit-fix').disabled = true;
+  try {
+    const res = await fetch('/api/correct/submit', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        user_id: userId, post_id: currentPost.post_id, verdict,
+        fixed_text: $('fixed-text').value.trim() || null,
+        explanation: $('explanation').value.trim() || null,
+        original_text: $('original-text').value.trim() || null,
+        translated_text: $('translated-text').value.trim() || null,
+      }),
+    });
+    const j = await res.json();
+    if (!j.ok) throw new Error(j.error);
+    showToast(`+${j.points}pt 提案しました`);
+    loadPointsBadge();
+    loadFixNext();
+  } catch (e) { $('status').textContent = e.message; }
+  finally { $('submit-fix').disabled = false; }
+});
+
+async function loadVoteNext() {
+  $('vote-card').hidden = true; $('empty-vote').hidden = true;
+  $('status').textContent = '読み込み中...';
+  await authReady;
+  try {
+    const res = await fetch(`/api/correct/vote/next?${new URLSearchParams({ user_id: userId, lang_pair: langPair })}`);
+    const j = await res.json();
+    if (!j.ok) throw new Error(j.error);
+    $('status').textContent = '';
+    if (!j.correction) { $('empty-vote').hidden = false; currentCorrection = null; return; }
+    currentCorrection = j.correction;
+    $('vote-imgs').innerHTML =
+      `<div><img src="${currentCorrection.src_image_url}" alt="原文"><p class="cap">原文</p></div>` +
+      (currentCorrection.tgt_image_url ? `<div><img src="${currentCorrection.tgt_image_url}" alt="訳文"><p class="cap">訳文</p></div>` : '');
+    $('vote-meta').textContent =
+      `原文: ${currentCorrection.original_text || '—'} / 現在の訳: ${currentCorrection.translated_text || '—'}`;
+    $('vote-fixed').textContent = currentCorrection.verdict === 'no_issue'
+      ? '裁定: このままで問題なし'
+      : `提案訳: ${currentCorrection.fixed_text}` + (currentCorrection.explanation ? ` (${currentCorrection.explanation})` : '');
+    $('vote-card').hidden = false;
+  } catch (e) { $('status').textContent = e.message; }
+}
+
+async function vote(agree) {
+  if (!currentCorrection) return;
+  document.querySelectorAll('#vote-card .btns button').forEach((b) => b.disabled = true);
+  try {
+    const res = await fetch('/api/correct/vote/submit', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, correction_id: currentCorrection.correction_id, agree }),
+    });
+    const j = await res.json();
+    if (!j.ok) throw new Error(j.error);
+    showToast(`+${j.points}pt` + (j.confirmed ? ' ・確定しました!' : ''));
+    loadPointsBadge();
+    loadVoteNext();
+  } catch (e) { $('status').textContent = e.message; }
+  finally { document.querySelectorAll('#vote-card .btns button').forEach((b) => b.disabled = false); }
+}
+$('btn-agree').addEventListener('click', () => vote(true));
+$('btn-disagree').addEventListener('click', () => vote(false));
+
+authReady.then(() => { loadPointsBadge(); refreshCurrent(); });
+</script>
+</body>
+</html>

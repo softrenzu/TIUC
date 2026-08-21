@@ -37,30 +37,33 @@
 </style>
 <body>
 
-<a class="back" href="/">← モリノミカタに戻る</a>
-<h1>クビアカツヤカミキリ 通報アプリ</h1>
+<a class="back" href="/">← トップに戻る</a>
+<h1>キュレーションモード</h1>
 <p class="lead">
-  サクラ・ウメ・モモなどバラ科樹木の害虫「ヨソモン(クビアカツヤカミキリ)」の被害を、
-  スマホで撮影して通報できます。集まった情報は地図で公開され、行政の防除につながります。
-  記録するほど、育てている相棒(モリノミカタ)も成長します。
+  投稿された外国語表記を評価・修正します。ここだけが「属性(能力)」で中身が変わりますが、
+  素養がなくても練習として参加できます。まずは違和感チェックからどうぞ。
 </p>
 
 <p class="stats" id="stats" hidden></p>
 
 <div class="grid">
-  <a class="tile primary" href="report.html">
-    <span class="tile-icon">📷</span>
-    <span class="tile-title">ヨソモンを記録する</span>
-    <span class="tile-desc">写真と場所を送る</span>
+  <a class="tile primary" href="judge.html">
+    <span class="tile-icon">🔍</span>
+    <span class="tile-title">違和感チェック</span>
+    <span class="tile-desc">訳文言語のネイティブ向け・一タップ</span>
   </a>
-  <a class="tile map-accent" href="map.html">
-    <span class="tile-icon">🗺️</span>
-    <span class="tile-title">被害マップ</span>
-    <span class="tile-desc">状況を地図で見る</span>
+  <a class="tile map-accent" href="curate.html">
+    <span class="tile-icon">✏️</span>
+    <span class="tile-title">修正・投票</span>
+    <span class="tile-desc">バイリンガル向け・正誤判定</span>
+  </a>
+  <a class="tile-bar" href="report.html">
+    <span class="tile-bar-icon">📷</span>
+    <span>撮影投稿モードへ(新しい表記を投稿する)</span>
   </a>
   <a class="tile-bar" href="mypage.html">
     <span class="tile-bar-icon">👤</span>
-    <span>マイページ(通報履歴・ポイント)</span>
+    <span>マイページ(貢献履歴・ポイント)</span>
   </a>
 </div>
 
@@ -70,8 +73,8 @@
 fetch('/api/health').then((r) => r.json()).then((j) => {
   if (!j.ok) return;
   const el = document.getElementById('stats');
-  el.innerHTML = `これまでに <strong>${j.total}</strong> 件の通報が届いています` +
-    (j.confirmed ? `(うち被害確定 <strong>${j.confirmed}</strong> 件)` : '') + '。';
+  el.innerHTML = `これまでに <strong>${j.total}</strong> 件の投稿が届いています` +
+    (j.needs_fix ? `(うち修正待ち <strong>${j.needs_fix}</strong> 件)` : '') + '。';
   el.hidden = false;
 }).catch(() => {}); // 取得に失敗してもページ自体は問題なく表示する
 </script>
