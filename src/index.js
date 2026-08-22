@@ -646,8 +646,8 @@ async function correctVoteSubmit(request, env) {
 }
 
 // =====================================================================
-// 公開マップ(認証不要。メッシュ集計のみ。rule1: 生の原文/訳文・座標は
-// 店がループに入る(採用)前は一般公開しない)
+// 公開マップ(認証不要)。メッシュ集計に加え、投稿直後から正確な座標付き
+// ピンを公開する(2026-08-22、rule1改定。店の採用を待たない)。
 // =====================================================================
 async function publicMap(request, env) {
   const sp = new URL(request.url).searchParams;
@@ -689,12 +689,13 @@ async function publicMap(request, env) {
      GROUP BY ${level}
      LIMIT 2000`;
 
-  // 座標を正確に開示できるのは、店が採用してコミュニティ検証済みになった投稿のみ(rule1)
+  // rule1改定(2026-08-22): 投稿直後から公開マップに正確なピンを出す。
+  // 写真品質NGで機械的に除外された投稿(auto_rejected)のみ除く。
   const pinSql = `
-    SELECT id, lat, lng, lang_pair, place_kind, original_text, translated_text,
+    SELECT id, lat, lng, lang_pair, place_kind, status, original_text, translated_text,
            COALESCE(observed_at, created_at) AS event_at
       FROM posts
-     WHERE status = 'adopted'
+     WHERE status <> 'auto_rejected'
        AND lat BETWEEN ?1 AND ?2 AND lng BETWEEN ?3 AND ?4
        AND lang_pair IN (${langSql})
      LIMIT 500`;
@@ -732,6 +733,7 @@ async function publicMap(request, env) {
       type: "Feature",
       properties: {
         kind: "pin", id: row.id, lang_pair: row.lang_pair, place_kind: row.place_kind,
+        status: row.status,
         original_text: row.original_text, translated_text: row.translated_text,
         event_at: row.event_at,
       },
@@ -741,7 +743,7 @@ async function publicMap(request, env) {
 
   const body = JSON.stringify({ type: "FeatureCollection", features });
   const response = new Response(body, {
-    headers: { "content-type": "application/geo+json", "cache-control": "public, max-age=120" },
+    headers: { "content-type": "application/geo+json", "cache-control": "public, max-age=20" },
   });
   await cache.put(cacheKey, response.clone());
   return response;

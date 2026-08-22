@@ -111,14 +111,27 @@ const MESH_STEPS = [
   { max: 11, color: '#2e8b52', label: '6〜11件' },
   { max: Infinity, color: '#155c30', label: '12件以上' },
 ];
-const PIN_COLOR = '#1a4d73';
+const STATUS_STYLE = {
+  pending_judgment: { color: '#c9a227', label: '審査中' },
+  needs_fix:        { color: '#c9a227', label: '審査中' },
+  fix_proposed:     { color: '#c9a227', label: '修正案あり' },
+  looks_ok:         { color: '#8a8478', label: '違和感なし' },
+  confirmed:        { color: '#2e6da4', label: '修正確定(採用待ち)' },
+  adopted:          { color: '#1a4d73', label: '採用済み' },
+};
+const PIN_DEFAULT_COLOR = '#8a8478';
 
 for (const s of MESH_STEPS) {
   $('mesh-legend').insertAdjacentHTML('beforeend',
     `<div class="sw"><i class="box" style="background:${s.color}"></i>${s.label}</div>`);
 }
-$('pin-legend').insertAdjacentHTML('beforeend',
-  `<div class="sw"><i class="dot" style="background:${PIN_COLOR}"></i>採用済み</div>`);
+const seenPinLabels = new Set();
+for (const s of Object.values(STATUS_STYLE)) {
+  if (seenPinLabels.has(s.label)) continue;
+  seenPinLabels.add(s.label);
+  $('pin-legend').insertAdjacentHTML('beforeend',
+    `<div class="sw"><i class="dot" style="background:${s.color}"></i>${s.label}</div>`);
+}
 
 for (const [k, label] of Object.entries(LANG_LABEL)) {
   $('lang-filters').insertAdjacentHTML('beforeend',
@@ -214,19 +227,27 @@ async function main() {
       id: 'pins', type: 'circle', source: 'tiuc',
       filter: ['==', ['get', 'kind'], 'pin'],
       paint: {
-        'circle-radius': 7, 'circle-color': PIN_COLOR,
+        'circle-radius': 7,
+        'circle-color': [
+          'match', ['get', 'status'],
+          ...Object.entries(STATUS_STYLE).flatMap(([status, s]) => [status, s.color]),
+          PIN_DEFAULT_COLOR,
+        ],
         'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5,
       },
     });
 
     map.on('click', 'pins', (e) => {
       const p = e.features[0].properties;
+      const st = STATUS_STYLE[p.status];
+      const translatedLabel = (p.status === 'confirmed' || p.status === 'adopted') ? '確定訳' : '訳文(未確定)';
       new maplibregl.Popup({ closeButton: true, maxWidth: '260px' })
         .setLngLat(e.lngLat)
         .setHTML(`<table>
+          <tr><td>状態</td><td>${escapeHtml(st ? st.label : p.status)}</td></tr>
           <tr><td>言語</td><td>${LANG_LABEL[p.lang_pair] || p.lang_pair}</td></tr>
-          <tr><td>原文</td><td>${escapeHtml(p.original_text || '—')}</td></tr>
-          <tr><td>確定訳</td><td>${escapeHtml(p.translated_text || '—')}</td></tr>
+          <tr><td>原文</td><td>${escapeHtml(p.original_text || '(未記入)')}</td></tr>
+          <tr><td>${translatedLabel}</td><td>${escapeHtml(p.translated_text || '(未記入)')}</td></tr>
           <tr><td>日付</td><td>${jst(p.event_at)}</td></tr>
         </table>
         <p style="margin:8px 0 0"><a href="${googleMapsUrl(e.lngLat.lat, e.lngLat.lng)}"
