@@ -81,8 +81,23 @@ export default {
 					        SUM(status = 'needs_fix') AS needs_fix,
 					        SUM(status = 'confirmed') AS confirmed
 					   FROM posts`
-				).first();
-				return Response.json({ ok: true, ...r });
+				).first<{ total: number; pending: number | null; needs_fix: number | null; confirmed: number | null }>();
+
+				let datasetTotal = 0;
+				try {
+					const d = await env.DB.prepare("SELECT COUNT(*) AS total FROM dataset_images").first<{ total: number }>();
+					datasetTotal = d?.total ?? 0;
+				} catch {
+					// dataset_images is optional in development environments.
+				}
+
+				const postTotal = r?.total ?? 0;
+				return Response.json({
+					ok: true,
+					...r,
+					dataset_total: datasetTotal,
+					corpus_total: postTotal + datasetTotal,
+				});
 			}
 
 			return new Response("not found", { status: 404 });
