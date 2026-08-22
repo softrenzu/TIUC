@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ja">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>相棒とクエスト - TIUC</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  :root{--line:#e3e6df;--muted:#6b7068;--bg:#f5f7f3;--card:#fff;--accent:var(--color-accent,#1a5c3a)}
+  *{box-sizing:border-box} body{margin:0;background:linear-gradient(180deg,#eef5f0,#f7f8f5 34%);font-family:system-ui,-apple-system,sans-serif;color:#1e231f}
+  .wrap{width:min(100%,760px);margin:auto;padding:16px 16px 50px}.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.top a{font-size:12px;color:var(--muted);text-decoration:none}
+  .hero{background:#fff;border:1px solid var(--line);border-radius:28px;padding:28px 20px;text-align:center;box-shadow:0 14px 36px rgba(20,40,25,.07)}
+  #sprite{font-size:88px;line-height:1}.lv{font-size:22px;font-weight:800;margin-top:8px}.stage{font-size:12px;color:var(--muted);margin-top:2px}.bar{width:min(100%,340px);height:11px;background:#e5e8e2;border-radius:999px;margin:18px auto 6px;overflow:hidden}.fill{height:100%;background:var(--accent);border-radius:inherit;transition:width .35s}.xp{font-size:12px;color:var(--muted)}
+  .actions{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px}.action{padding:14px 8px;border-radius:16px;text-decoration:none;text-align:center;border:1px solid var(--line);background:#fff;font-size:12px;font-weight:700}.action span{display:block;font-size:24px;margin-bottom:4px}.action.primary{background:#1d603e;color:#fff;border-color:#1d603e}.action.secondary{background:#214f69;color:#fff;border-color:#214f69}
+  h2{font-size:17px;margin:28px 2px 10px}.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:15px;margin-bottom:9px}.quest{display:flex;align-items:center;gap:12px}.quest-body{flex:1}.qt{font-size:14px;font-weight:750}.qd{font-size:11px;color:var(--muted);margin-top:3px}.qr{font-size:11px;color:var(--accent);margin-top:4px}.claim{border:1px solid var(--accent);border-radius:999px;padding:8px 12px;background:#fff;color:var(--accent);font-weight:700;font-size:11px}.claim.ready{background:var(--accent);color:#fff}.claim:disabled{border-color:#ddd;color:#aaa;background:#f7f7f5}
+  .zukan{display:grid;grid-template-columns:80px repeat(4,1fr);gap:6px;align-items:center}.zh{font-size:10px;color:var(--muted);text-align:center}.zl{font-size:11px;font-weight:700}.slot{aspect-ratio:1;border:1px solid var(--line);border-radius:10px;display:grid;place-items:center;background:#f7f7f5;color:#bbb;font-size:15px}.slot.on{background:#edf5ef;border-color:#75a987;color:#1d603e}.impact{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.tile{text-align:center;padding:12px 4px;border:1px solid var(--line);border-radius:14px;background:#fff}.tile .n{font-size:18px;font-weight:800}.tile .l{font-size:10px;color:var(--muted);margin-top:2px}.empty{font-size:12px;color:var(--muted);padding:10px 2px}
+  @media(max-width:560px){.actions{grid-template-columns:repeat(3,1fr)}.zukan{grid-template-columns:64px repeat(4,1fr)}.impact{grid-template-columns:repeat(2,1fr)}.hero{padding-top:24px}}
+</style>
+<body><div class="wrap">
+  <div class="top"><a href="/">← TIUCに戻る</a><a href="mypage.html">マイページ</a></div>
+  <section class="hero">
+    <div id="sprite">🥚</div><div class="lv" id="level">Lv.1</div><div class="stage" id="stage">街ことばの相棒</div>
+    <div class="bar"><div class="fill" id="fill" style="width:0%"></div></div><div class="xp" id="xp">0 / 2 XP</div>
+  </section>
+  <div class="actions">
+    <a class="action primary" href="report.html"><span>📷</span>見つける</a>
+    <a class="action secondary" href="judge.html"><span>🔍</span>判定する</a>
+    <a class="action" href="map.html"><span>🗺️</span>街を見る</a>
+  </div>
+  <h2>クエスト</h2><div id="quests"><div class="empty">読み込み中…</div></div>
+  <h2>街ことば図鑑 <span id="zukan-count" style="font-size:12px;color:var(--muted);font-weight:400"></span></h2><div class="card"><div id="zukan"></div></div>
+  <h2>地域インパクト</h2><div id="impact"><div class="empty">まだ地域データがありません。</div></div>
+</div>
+<script type="module">
+import { getUserId, bootstrapAuth } from './auth.js';
+let userId=getUserId(); await bootstrapAuth().then(r=>{userId=r.userId});
+const $=id=>document.getElementById(id);
+const sprites={egg:'🥚',chick:'🐣',bird:'🐦',guide:'🦉'};
+async function loadCharacter(){const j=await fetch(`/api/game/character?user_id=${userId}`).then(r=>r.json());if(!j.ok)return;$('sprite').textContent=sprites[j.stage]||'🥚';$('level').textContent=`Lv.${j.level}`;$('xp').textContent=`${j.xp_into_level} / ${j.xp_for_next_level} XP`;const p=j.xp_for_next_level?Math.min(100,Math.round(j.xp_into_level/j.xp_for_next_level*100)):0;$('fill').style.width=`${p}%`;}
+async function loadQuests(){const j=await fetch(`/api/game/quests?user_id=${userId}`).then(r=>r.json());if(!j.ok)return;$('quests').innerHTML=j.quests.map(q=>`<div class="card quest"><div class="quest-body"><div class="qt">${q.claimed?'✓ ':''}${q.title}</div><div class="qd">${q.desc}</div><div class="qr">+${q.reward} XP</div></div><button class="claim ${q.done&&!q.claimed?'ready':''}" data-id="${q.id}" ${!q.done||q.claimed?'disabled':''}>${q.claimed?'受取済':q.done?'受け取る':'未達成'}</button></div>`).join('');document.querySelectorAll('.claim.ready').forEach(b=>b.addEventListener('click',async()=>{b.disabled=true;const r=await fetch('/api/game/quests/claim',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({user_id:userId,quest_id:b.dataset.id})}).then(x=>x.json());if(r.ok){await Promise.all([loadCharacter(),loadQuests()]);}}));}
+async function loadZukan(){const j=await fetch(`/api/game/encyclopedia?user_id=${userId}`).then(r=>r.json());if(!j.ok)return;const have=new Set(j.slots.map(x=>`${x.lang_pair}:${x.place_kind}`));const langs=[['ja-en','英語'],['ja-zh','中国語'],['ja-ko','韓国語']],kinds=[['menu','メニュー'],['sign','看板'],['notice','注意'],['other','その他']];let h='<div class="zukan"><div></div>'+kinds.map(k=>`<div class="zh">${k[1]}</div>`).join('');for(const l of langs){h+=`<div class="zl">${l[1]}</div>`+kinds.map(k=>`<div class="slot ${have.has(l[0]+':'+k[0])?'on':''}">${have.has(l[0]+':'+k[0])?'✓':'?'}</div>`).join('')}h+='</div>';$('zukan').innerHTML=h;$('zukan-count').textContent=`${j.total} / 12`;}
+async function loadImpact(){const j=await fetch(`/api/game/impact?user_id=${userId}`).then(r=>r.json());if(!j.ok||!j.region)return;const x=j.region;$('impact').innerHTML=`<div class="impact"><div class="tile"><div class="n">${x.posts||0}</div><div class="l">30日間の投稿</div></div><div class="tile"><div class="n">${x.confirmed||0}</div><div class="l">修正確定</div></div><div class="tile"><div class="n">${x.adopted||0}</div><div class="l">店舗採用</div></div><div class="tile"><div class="n">${x.rank}位</div><div class="l">地域内のあなた</div></div></div>`;}
+Promise.all([loadCharacter(),loadQuests(),loadZukan(),loadImpact()]).catch(console.error);
+</script></body></html>
