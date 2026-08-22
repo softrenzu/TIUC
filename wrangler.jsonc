@@ -1,8 +1,8 @@
 {
   "name": "tiuc",
-  "main": "src/index.js",
+  "main": "src/index.ts",
   "compatibility_date": "2026-07-01",
-  "account_id": "f42aaf9006ab8d81017425e43c2beb2c",
+  // "account_id": "f42aaf9006ab8d81017425e43c2beb2c",
   "assets": {
     "directory": "./public"
   },
