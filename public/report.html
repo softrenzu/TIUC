@@ -302,6 +302,7 @@ $('file-src').addEventListener('change', async (ev) => {
     $('src-status').innerHTML = `<span class="ok">${full.w}×${full.h} / ${(full.blob.size / 1024).toFixed(0)} KB</span>`;
     $('preview-src').innerHTML = `<img class="preview" src="${URL.createObjectURL(full.blob)}" alt="">`;
     $('tgt-question').hidden = false;
+    refresh();
   } catch (e) {
     $('src-status').innerHTML = `<span class="warn">画像を処理できません: ${e.message}</span>`;
     return;
