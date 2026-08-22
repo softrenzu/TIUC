@@ -209,7 +209,12 @@ Claude Code はまず、コピー元クビアカの `src/`・`public/`・`migrat
 
 ```
 posts（外国語表記の投稿）           ← クビアカ reports を改名・改造
-  ├─ 写真(原文/訳文, 1〜2枚), 位置, 言語ペア, 発見者UUID, situation, ocr_src, ocr_tgt, status
+  ├─ 写真(1〜2枚), 位置, 言語ペア, 発見者UUID, situation, ocr_src, ocr_tgt, status
+  │     src_*＝見つけた外国語表記の写真(必須)、tgt_*＝日本語原文の写真(任意、あれば)
+  │     （2026-08-22改定：発見者は外国語の表記さえ撮れれば投稿できる。日本語版の
+  │     写真は撮影後に「日本語版の写真もありますか？」で任意追加。列名src/tgtは
+  │     旧仕様の名残でDBは未変更、意味だけ入れ替えた。judge.html/curate.htmlの
+  │     画像キャプションもこれに合わせて左右反転済み）
   │
   ├─ quality_checks（写真品質・シチュエーション入力）  [新規] 誰でもサブモード
   │     └─ 鮮明か, 表記種別, 判定者UUID, weight
@@ -282,7 +287,8 @@ posts.status:
 - `migrations/0008_translation_domain.sql`: reports→postsの作り替え完了。users / posts / quality_checks /
   judgments / corrections / votes / levels（スキーマのみ） / gold_items / point_events を実装。tiuc-db（新規D1）・
   tiuc-photos（新規R2）に適用済みでkubiaka-dbとは分離されている。
-- ①撮影投稿：`report.html` + `/api/posts`。1〜2枚（原文/訳文が別写真でも可）・言語ペア（ja-en/ja-zh/ja-ko）・
+- ①撮影投稿：`report.html` + `/api/posts`。外国語表記の写真は必須・日本語原文の写真は任意（1枚目投稿後に
+  「日本語版の写真もありますか？」で追加を促す）・言語ペア（ja-en/ja-zh/ja-ko）・
   表記種別（任意）・「変かも」フラグ（任意）・位置情報（EXIF/GPS/地図タップ）・近隣重複チェック。AI一次フィルタ（OCR）は
   未実装のため、投稿は常にpending_judgmentから始まる（auto_rejectedは無い）。
 - ②違和感チェック：`judge.html` + `/api/judge/next|submit`。一タップ・キュー・言語ペア別。2票の多数決で

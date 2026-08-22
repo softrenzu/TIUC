@@ -149,7 +149,8 @@ async function createPost(request, env) {
   const observedAt = Number.isFinite(obsRaw) && obsRaw > 0 ? Math.floor(obsRaw) : null;
   const situation = String(form.get("situation") || "").trim().slice(0, 500) || null;
 
-  // 可変投稿フロー: 原文写真(src)は必須、訳文写真(tgt)は任意(1枚に両方写っていてもよい)
+  // 可変投稿フロー(2026-08-22改定): 見つけた外国語表記の写真(src)は必須、
+  // 日本語原文の写真(tgt)は任意(1枚に両方写っていてもよい)
   const srcFull = form.get("src_full");
   const srcThumb = form.get("src_thumb");
   if (!(srcFull instanceof File) || !(srcThumb instanceof File)) return bad("写真がありません");

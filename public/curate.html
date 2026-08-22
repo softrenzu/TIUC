@@ -190,8 +190,8 @@ async function loadFixNext() {
     if (!j.post) { $('empty-fix').hidden = false; currentPost = null; return; }
     currentPost = j.post;
     $('fix-imgs').innerHTML =
-      `<div><img src="${currentPost.src_image_url}" alt="原文"><p class="cap">原文</p></div>` +
-      (currentPost.tgt_image_url ? `<div><img src="${currentPost.tgt_image_url}" alt="訳文"><p class="cap">訳文</p></div>` : '');
+      `<div><img src="${currentPost.src_image_url}" alt="訳文"><p class="cap">訳文</p></div>` +
+      (currentPost.tgt_image_url ? `<div><img src="${currentPost.tgt_image_url}" alt="原文"><p class="cap">原文</p></div>` : '');
     $('fix-meta').textContent = currentPost.situation ? `メモ: ${currentPost.situation}` : '';
     $('original-text').value = currentPost.original_text || '';
     $('translated-text').value = currentPost.translated_text || '';
@@ -243,8 +243,8 @@ async function loadVoteNext() {
     if (!j.correction) { $('empty-vote').hidden = false; currentCorrection = null; return; }
     currentCorrection = j.correction;
     $('vote-imgs').innerHTML =
-      `<div><img src="${currentCorrection.src_image_url}" alt="原文"><p class="cap">原文</p></div>` +
-      (currentCorrection.tgt_image_url ? `<div><img src="${currentCorrection.tgt_image_url}" alt="訳文"><p class="cap">訳文</p></div>` : '');
+      `<div><img src="${currentCorrection.src_image_url}" alt="訳文"><p class="cap">訳文</p></div>` +
+      (currentCorrection.tgt_image_url ? `<div><img src="${currentCorrection.tgt_image_url}" alt="原文"><p class="cap">原文</p></div>` : '');
     $('vote-meta').textContent =
       `原文: ${currentCorrection.original_text || '—'} / 現在の訳: ${currentCorrection.translated_text || '—'}`;
     $('vote-fixed').textContent = currentCorrection.verdict === 'no_issue'

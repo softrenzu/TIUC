@@ -96,7 +96,8 @@
 
 <div class="step" data-step="1">
   <fieldset>
-    <legend>1. 写真</legend>
+    <legend>1. 見つけた外国語の表記を撮影</legend>
+    <p class="lead" style="margin:0 0 8px">メニュー・看板・注意書きなど、気になった外国語の表記を撮ってください。</p>
     <div class="file-input-group">
       <button id="camera-btn-src" class="camera-btn">カメラを開始</button>
       <button id="file-btn-src" class="file-btn">ファイルを選択</button>
@@ -104,12 +105,13 @@
       <p class="status" id="src-status">未選択</p>
       <div id="preview-src"></div>
     </div>
-    <div class="toggle-row">
+    <div id="tgt-question" class="toggle-row" hidden>
       <input type="checkbox" id="has-tgt">
-      <label for="has-tgt">訳文が別の写真になっている</label>
+      <label for="has-tgt">この表記の日本語版の写真もありますか？(任意)</label>
     </div>
     <div id="tgt-wrap" hidden>
       <div class="file-input-group">
+        <p class="status" style="margin:0 0 4px">2. 日本語表記の写真</p>
         <button id="camera-btn-tgt" class="camera-btn">カメラを開始</button>
         <button id="file-btn-tgt" class="file-btn">ファイルを選択</button>
         <input id="file-tgt" type="file" accept="image/*" style="display:none;">
@@ -299,6 +301,7 @@ $('file-src').addEventListener('change', async (ev) => {
     state.srcThumb = thumb.blob;
     $('src-status').innerHTML = `<span class="ok">${full.w}×${full.h} / ${(full.blob.size / 1024).toFixed(0)} KB</span>`;
     $('preview-src').innerHTML = `<img class="preview" src="${URL.createObjectURL(full.blob)}" alt="">`;
+    $('tgt-question').hidden = false;
   } catch (e) {
     $('src-status').innerHTML = `<span class="warn">画像を処理できません: ${e.message}</span>`;
     return;

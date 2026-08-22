@@ -128,8 +128,8 @@ async function loadNext() {
     if (!j.post) { $('empty').hidden = false; current = null; return; }
     current = j.post;
     $('imgs').innerHTML =
-      `<div><img src="${current.src_thumb_url}" alt="原文"><p class="cap">原文</p></div>` +
-      (current.tgt_thumb_url ? `<div><img src="${current.tgt_thumb_url}" alt="訳文"><p class="cap">訳文</p></div>` : '');
+      `<div><img src="${current.src_thumb_url}" alt="訳文"><p class="cap">訳文</p></div>` +
+      (current.tgt_thumb_url ? `<div><img src="${current.tgt_thumb_url}" alt="原文"><p class="cap">原文</p></div>` : '');
     $('meta').textContent = current.situation ? `メモ: ${current.situation}` : '';
     $('card').hidden = false;
   } catch (e) {
