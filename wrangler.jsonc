@@ -2,6 +2,7 @@
   "name": "tiuc",
   "main": "src/index.js",
   "compatibility_date": "2026-07-01",
+  "account_id": "f42aaf9006ab8d81017425e43c2beb2c",
   "assets": {
     "directory": "./public"
   },
@@ -9,7 +10,7 @@
     {
       "binding": "DB",
       "database_name": "tiuc-db",
-      "database_id": "5768a761-31f1-4295-a4db-19adcac485a5"
+      "database_id": "765019d4-9784-49dc-8b9e-5601d532f800"
     }
   ],
   "r2_buckets": [
