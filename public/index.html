@@ -2,114 +2,89 @@
 <html lang="ja">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#f7f8f5">
 <title>TIUC: Today is under construction.</title>
 <link rel="stylesheet" href="tokens.css">
 <style>
-  :root { --line:#ddd; --muted:#666; --warn:#a33; --ok:#161; }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; min-height: 100%; }
-  body { font-family: system-ui, -apple-system, sans-serif; color: #222;
-         display: flex; flex-direction: column; }
-
-  #topbar { display: flex; align-items: center; gap: 8px; padding: 10px 16px;
-            border-bottom: 1px solid var(--line); flex: none; }
-  #topbar h1 { font-size: 15px; margin: 0; flex: 1; }
-  #topbar h1 .tagline { display: block; font-size: 10px; color: var(--muted); font-weight: 400; }
-  #login-link { font-size: 12px; color: #1a4d73; text-decoration: none; flex: none; }
-
-  #hero { flex: none; padding: 28px 16px 20px; text-align: center;
-          background: linear-gradient(180deg, #eef5f0, #fff); }
-  #hero .headline { font-size: 15px; color: #222; margin: 0 0 14px; line-height: 1.5; }
-  #stats-row { display: flex; justify-content: center; gap: 18px; }
-  #stats-row .stat { text-align: center; }
-  #stats-row .n { font-size: 20px; font-weight: 700; color: var(--color-accent, #1a5c3a); }
-  #stats-row .label { font-size: 11px; color: var(--muted); }
-
-  #modes { flex: none; padding: 16px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-  .mode-card { display: flex; flex-direction: column; align-items: center; justify-content: center;
-               gap: 6px; padding: 16px 6px; min-height: 88px; border-radius: var(--radius-card, 16px);
-               text-decoration: none; color: inherit; border: 1px solid var(--line); text-align: center; }
-  .mode-card .icon { font-size: 28px; line-height: 1; }
-  .mode-card .title { font-size: 12px; font-weight: 700; line-height: 1.3; }
-  .mode-card.primary { background: var(--color-accent, #1a5c3a); color: #fff; border-color: var(--color-accent, #1a5c3a); }
-  .mode-card.secondary { background: var(--color-secondary, #1a4d73); color: #fff; border-color: var(--color-secondary, #1a4d73); }
-  .mode-card.tertiary { background: #fff; }
-  .mode-card.tertiary:active { background: #f4f4f2; }
-
-  #my-points { flex: none; margin: 0 16px 16px; padding: 12px 16px; border: 1px solid var(--line);
-               border-radius: var(--radius-card, 16px); display: flex; align-items: center;
-               justify-content: space-between; text-decoration: none; color: inherit; }
-  #my-points .label { font-size: 12px; color: var(--muted); }
-  #my-points .value { font-size: 16px; font-weight: 700; }
-
-  footer { flex: 1; display: flex; align-items: flex-end; padding: 12px 16px; }
-  footer .note { font-size: 11px; color: var(--muted); margin: 0; text-align: center; width: 100%; }
+  :root { --line:#e3e6df; --muted:#6b7068; --surface:#fff; --surface-accent:#edf5ef; --text:#1d211d; --shadow-sm:0 1px 2px rgba(18,28,20,.04),0 10px 30px rgba(18,28,20,.05); --shadow-lg:0 16px 50px rgba(18,28,20,.08); }
+  * { box-sizing:border-box; }
+  html { background:#f7f8f5; }
+  body { margin:0; min-height:100vh; font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; color:var(--text); background:radial-gradient(circle at 10% 0%,rgba(46,108,72,.10),transparent 28rem),linear-gradient(180deg,#fbfcfa 0%,#f5f7f3 100%); }
+  a { color:inherit; }
+  .shell { width:min(100%,1080px); margin:0 auto; padding:0 20px; }
+  #topbar { height:72px; display:flex; align-items:center; justify-content:space-between; gap:16px; }
+  .brand { display:inline-flex; align-items:center; gap:10px; text-decoration:none; }
+  .brand-mark { width:36px; height:36px; border-radius:12px; display:grid; place-items:center; background:var(--color-accent,#1a5c3a); color:#fff; font-weight:800; letter-spacing:-.04em; box-shadow:var(--shadow-sm); }
+  .brand-copy { display:flex; flex-direction:column; line-height:1.05; }
+  .brand-copy strong { font-size:15px; letter-spacing:.03em; }
+  .brand-copy span { margin-top:4px; color:var(--muted); font-size:10px; }
+  #login-link { min-height:38px; display:inline-flex; align-items:center; justify-content:center; padding:0 14px; border:1px solid var(--line); border-radius:999px; background:rgba(255,255,255,.78); color:#3d5145; text-decoration:none; font-size:12px; font-weight:700; }
+  main { padding:30px 0 56px; }
+  #hero { position:relative; overflow:hidden; border:1px solid rgba(32,93,58,.10); border-radius:30px; padding:clamp(34px,6vw,72px) clamp(22px,7vw,76px); background:radial-gradient(circle at 88% 16%,rgba(255,255,255,.72),transparent 20rem),linear-gradient(135deg,#eef6ef 0%,#f8faf5 58%,#eef4f7 100%); box-shadow:var(--shadow-lg); }
+  #hero::after { content:""; position:absolute; right:-90px; bottom:-130px; width:320px; height:320px; border-radius:50%; border:46px solid rgba(26,92,58,.055); pointer-events:none; }
+  .eyebrow { display:inline-flex; align-items:center; gap:7px; margin:0 0 18px; padding:7px 11px; border:1px solid rgba(26,92,58,.13); border-radius:999px; background:rgba(255,255,255,.66); color:#356145; font-size:11px; font-weight:800; letter-spacing:.05em; }
+  .eyebrow::before { content:""; width:7px; height:7px; border-radius:50%; background:#35a55c; }
+  #hero h1 { position:relative; z-index:1; max-width:760px; margin:0; font-size:clamp(30px,5.8vw,58px); line-height:1.12; letter-spacing:-.045em; font-weight:800; }
+  #hero h1 .accent { color:var(--color-accent,#1a5c3a); }
+  .hero-lead { position:relative; z-index:1; max-width:640px; margin:20px 0 0; color:#5f675f; font-size:clamp(14px,2vw,17px); line-height:1.8; }
+  #stats-row { position:relative; z-index:1; display:flex; gap:10px; flex-wrap:wrap; margin-top:30px; }
+  #stats-row .stat { min-width:132px; padding:13px 16px; border:1px solid rgba(255,255,255,.9); border-radius:16px; background:rgba(255,255,255,.70); }
+  #stats-row .n { font-size:23px; font-weight:800; letter-spacing:-.03em; }
+  #stats-row .label { margin-top:2px; color:var(--muted); font-size:11px; }
+  .section-head { margin:34px 2px 14px; display:flex; align-items:end; justify-content:space-between; gap:16px; }
+  .section-head h2 { margin:0; font-size:18px; letter-spacing:-.02em; }
+  .section-head p { margin:0; color:var(--muted); font-size:12px; }
+  #modes { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+  .mode-card { min-height:190px; display:flex; flex-direction:column; justify-content:space-between; gap:18px; padding:22px; border:1px solid var(--line); border-radius:22px; background:rgba(255,255,255,.86); text-decoration:none; box-shadow:var(--shadow-sm); transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease; }
+  .mode-card:hover { transform:translateY(-3px); box-shadow:0 16px 34px rgba(18,28,20,.09); }
+  .mode-card.primary { background:#1d603e; color:#fff; border-color:#1d603e; }
+  .mode-card.secondary { background:#214f69; color:#fff; border-color:#214f69; }
+  .mode-top { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+  .mode-card .icon { width:48px; height:48px; display:grid; place-items:center; border-radius:15px; background:rgba(255,255,255,.14); font-size:24px; }
+  .mode-card.tertiary .icon { background:var(--surface-accent); }
+  .mode-arrow { font-size:18px; opacity:.68; }
+  .mode-card .title { display:block; font-size:18px; font-weight:800; letter-spacing:-.02em; }
+  .mode-card .desc { display:block; margin-top:6px; font-size:12px; line-height:1.65; opacity:.78; }
+  #my-points { margin-top:14px; padding:18px 20px; display:flex; align-items:center; justify-content:space-between; gap:16px; border:1px solid var(--line); border-radius:20px; background:rgba(255,255,255,.84); text-decoration:none; box-shadow:var(--shadow-sm); }
+  .my-copy { display:flex; align-items:center; gap:12px; min-width:0; }
+  .my-icon { width:40px; height:40px; flex:none; display:grid; place-items:center; border-radius:13px; background:#f0f3ef; font-size:18px; }
+  #my-points .label { display:block; font-size:12px; color:var(--muted); }
+  #my-points .hint { display:block; margin-top:2px; font-size:11px; color:#8a8f88; }
+  #my-points .value { flex:none; font-size:16px; font-weight:800; }
+  footer { padding:0 0 28px; }
+  footer .note { margin:0; color:#858a84; font-size:11px; line-height:1.7; text-align:center; }
+  @media(max-width:720px){ .shell{padding:0 14px} #topbar{height:64px} main{padding-top:16px} #hero{border-radius:24px;padding:30px 20px 26px} #hero h1{font-size:clamp(31px,10vw,45px)} .hero-lead{margin-top:15px} #stats-row{margin-top:24px} #stats-row .stat{flex:1;min-width:0;padding:12px} .section-head{align-items:flex-start;flex-direction:column;gap:4px;margin-top:26px} #modes{grid-template-columns:1fr;gap:10px} .mode-card{min-height:132px;padding:18px} #my-points{padding:15px 16px} #my-points .hint{display:none} }
+  @media(prefers-reduced-motion:reduce){ .mode-card{transition:none} }
 </style>
 <body>
-
-<div id="topbar">
-  <h1>TIUC<span class="tagline">Today is under construction.</span></h1>
+<div class="shell">
+<header id="topbar">
+  <a href="/" class="brand" aria-label="TIUC トップ"><span class="brand-mark">T</span><span class="brand-copy"><strong>TIUC</strong><span>Today is under construction.</span></span></a>
   <a id="login-link" href="#">ログイン</a>
-</div>
-
-<section id="hero">
-  <p class="headline">街のヘンな外国語表記、<br>みんなで見つけて、なおそう。</p>
-  <div id="stats-row">
-    <div class="stat"><div class="n" id="stat-posts">—</div><div class="label">投稿</div></div>
-    <div class="stat"><div class="n" id="stat-fixed">—</div><div class="label">確定した修正</div></div>
+</header>
+<main>
+  <section id="hero">
+    <p class="eyebrow">CIVIC TRANSLATION PROJECT</p>
+    <h1>街の外国語を、<br><span class="accent">みんなで少しずつ良くする。</span></h1>
+    <p class="hero-lead">気になった外国語表記を撮る。自然かどうかを確かめる。より良い表現を提案する。小さな参加を積み重ねて、街のことばをアップデートします。</p>
+    <div id="stats-row"><div class="stat"><div class="n" id="stat-posts">—</div><div class="label">集まった投稿</div></div><div class="stat"><div class="n" id="stat-fixed">—</div><div class="label">確定した修正</div></div></div>
+  </section>
+  <div class="section-head"><h2>参加する</h2><p>できることから、1つだけでも。</p></div>
+  <div id="modes">
+    <a href="report.html" class="mode-card primary"><div class="mode-top"><span class="icon">📷</span><span class="mode-arrow">↗</span></div><div><span class="title">見つける</span><span class="desc">街で見つけた外国語表記を撮影して投稿します。</span></div></a>
+    <a href="menu.html" class="mode-card secondary"><div class="mode-top"><span class="icon">🔍</span><span class="mode-arrow">↗</span></div><div><span class="title">確かめる・なおす</span><span class="desc">自然さを判定したり、より良い表現を提案します。</span></div></a>
+    <a href="map.html" class="mode-card tertiary"><div class="mode-top"><span class="icon">🗺️</span><span class="mode-arrow">↗</span></div><div><span class="title">街を見る</span><span class="desc">集まった投稿と改善状況を地図から確認します。</span></div></a>
   </div>
-</section>
-
-<div id="modes">
-  <a href="report.html" class="mode-card primary">
-    <span class="icon">📷</span>
-    <span class="title">撮影投稿</span>
-  </a>
-  <a href="menu.html" class="mode-card secondary">
-    <span class="icon">🔍</span>
-    <span class="title">キュレーション</span>
-  </a>
-  <a href="map.html" class="mode-card tertiary">
-    <span class="icon">🗺️</span>
-    <span class="title">マップで見る</span>
-  </a>
+  <a href="mypage.html" id="my-points"><span class="my-copy"><span class="my-icon">◎</span><span><span class="label">あなたの貢献</span><span class="hint">履歴・ポイント・レベルを見る</span></span></span><span class="value" id="my-points-value">— pt</span></a>
+</main>
+<footer><p class="note">ログイン不要・匿名でも利用できます。投稿された写真は、判定・修正に必要な範囲で取り扱われます。</p></footer>
 </div>
-
-<a href="mypage.html" id="my-points">
-  <span class="label">あなたのポイント</span>
-  <span class="value" id="my-points-value">— pt</span>
-</a>
-
-<footer>
-  <p class="note">ログイン不要・匿名で利用できます。写真は判定・修正の関係者のみが閲覧できます。</p>
-</footer>
-
 <script type="module">
 import { getUserId, bootstrapAuth, googleLoginUrl } from './auth.js';
-
-const $ = (id) => document.getElementById(id);
-let userId = getUserId();
-const authReady = bootstrapAuth().then((r) => {
-  userId = r.userId;
-  if (r.session) {
-    $('login-link').textContent = r.session.display_name || 'ログイン中';
-    $('login-link').href = 'mypage.html';
-  } else {
-    $('login-link').href = googleLoginUrl(userId);
-  }
-});
-
-fetch('/api/health').then((r) => r.json()).then((j) => {
-  if (!j.ok) return;
-  $('stat-posts').textContent = j.total;
-  $('stat-fixed').textContent = j.confirmed ?? 0;
-}).catch(() => {});
-
-authReady.then(() => {
-  fetch(`/api/mypage?user_id=${userId}`).then((r) => r.json()).then((j) => {
-    if (j.ok) $('my-points-value').textContent = `${j.summary.points_total} pt / Lv.${j.summary.level}`;
-  }).catch(() => {});
-});
+const $=(id)=>document.getElementById(id); let userId=getUserId();
+const authReady=bootstrapAuth().then((r)=>{userId=r.userId;if(r.session){$('login-link').textContent=r.session.display_name||'ログイン中';$('login-link').href='mypage.html';}else{$('login-link').href=googleLoginUrl(userId);}});
+fetch('/api/health').then((r)=>r.json()).then((j)=>{if(!j.ok)return;$('stat-posts').textContent=j.total;$('stat-fixed').textContent=j.confirmed??0;}).catch(()=>{});
+authReady.then(()=>{fetch(`/api/mypage?user_id=${userId}`).then((r)=>r.json()).then((j)=>{if(j.ok)$('my-points-value').textContent=`${j.summary.points_total} pt / Lv.${j.summary.level}`;}).catch(()=>{});});
 </script>
 </body>
 </html>
