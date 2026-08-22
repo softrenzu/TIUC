@@ -14,7 +14,8 @@ if (!(Test-Path $wrangler)) { throw "Wrangler not found. Run npm install first."
 if ([string]::IsNullOrWhiteSpace($env:CLOUDFLARE_API_TOKEN)) { throw "CLOUDFLARE_API_TOKEN is not set." }
 
 $files = @(Get-ChildItem $datasetRoot -Recurse -File | Where-Object { $_.Extension.ToLowerInvariant() -in @('.jpg','.jpeg','.png','.webp') })
-if ($files.Count -ne 1000) { throw "Expected exactly 1000 images, found $($files.Count)." }
+$fileCount = [int]$files.Count
+if ($fileCount -ne 1000) { throw "Expected exactly 1000 images, found $fileCount." }
 
 function Get-GroupCode([string]$relativePath) {
     $first = ($relativePath -split '/')[0]
@@ -30,9 +31,11 @@ function Get-R2Key($file) {
 }
 
 Write-Host "Step 1/4: verify R2 sample objects" -ForegroundColor Cyan
-$sampleIndexes = @(0, [int][Math]::Floor($files.Count / 2), $files.Count - 1)
+$middleIndex = [int][Math]::Floor($fileCount / 2)
+$lastIndex = [int]($fileCount - 1)
+$sampleIndexes = @(0, $middleIndex, $lastIndex)
 foreach ($idx in $sampleIndexes) {
-    $f = $files[$idx]
+    $f = $files[[int]$idx]
     $key = Get-R2Key $f
     $tmp = Join-Path $env:TEMP ("tiuc_r2_verify_" + [Guid]::NewGuid().ToString('N') + $f.Extension)
     & $wrangler r2 object get "$bucket/$key" --file="$tmp" --remote
@@ -44,24 +47,32 @@ foreach ($idx in $sampleIndexes) {
     Write-Host "verified: $key" -ForegroundColor Green
 }
 
-Write-Host "Step 2/4: update D1 r2_key values" -ForegroundColor Cyan
-$sqlLines = New-Object 'System.Collections.Generic.List[string]'
-foreach ($f in $files) {
-    $rel = $f.FullName.Substring($datasetRoot.Length + 1).Replace('\','/')
-    $repoPath = "dataset/$rel"
-    $key = Get-R2Key $f
-    $repoSql = $repoPath.Replace("'", "''")
-    $keySql = $key.Replace("'", "''")
-    $sqlLines.Add("UPDATE dataset_images SET r2_key='$keySql' WHERE repo_path='$repoSql';")
+Write-Host "Step 2/4: update D1 r2_key values in chunks" -ForegroundColor Cyan
+$chunkSize = 100
+for ($start = 0; $start -lt $fileCount; $start += $chunkSize) {
+    $endExclusive = [Math]::Min($start + $chunkSize, $fileCount)
+    $sqlLines = New-Object 'System.Collections.Generic.List[string]'
+
+    for ($i = $start; $i -lt $endExclusive; $i++) {
+        $f = $files[$i]
+        $rel = $f.FullName.Substring($datasetRoot.Length + 1).Replace('\','/')
+        $repoPath = "dataset/$rel"
+        $key = Get-R2Key $f
+        $repoSql = $repoPath.Replace("'", "''")
+        $keySql = $key.Replace("'", "''")
+        $sqlLines.Add("UPDATE dataset_images SET r2_key='$keySql' WHERE repo_path='$repoSql';")
+    }
+
+    $chunkNo = [int]([Math]::Floor($start / $chunkSize) + 1)
+    $sqlPath = Join-Path $env:TEMP ("tiuc_dataset_r2_keys_chunk_" + $chunkNo + ".sql")
+    [System.IO.File]::WriteAllLines($sqlPath, $sqlLines, (New-Object System.Text.UTF8Encoding($false)))
+
+    & $wrangler d1 execute $db --remote --file="$sqlPath" --yes
+    if ($LASTEXITCODE -ne 0) { throw "D1 r2_key update failed in chunk $chunkNo. GitHub dataset will NOT be deleted." }
+    Write-Host "D1 chunk $chunkNo / 10 updated" -ForegroundColor Green
 }
 
-$sqlPath = Join-Path $env:TEMP 'tiuc_dataset_r2_keys_resume.sql'
-[System.IO.File]::WriteAllLines($sqlPath, $sqlLines, (New-Object System.Text.UTF8Encoding($false)))
-
-& $wrangler d1 execute $db --remote --file="$sqlPath" --yes
-if ($LASTEXITCODE -ne 0) { throw "D1 r2_key update failed. GitHub dataset will NOT be deleted." }
-
-$verifyRaw = & $wrangler d1 execute $db --remote --json --command "SELECT COUNT(*) AS total, SUM(CASE WHEN r2_key IS NOT NULL AND r2_key <> '' THEN 1 ELSE 0 END) AS r2_count FROM dataset_images;"
+$verifyRaw = & $wrangler d1 execute $db --remote --json --command "SELECT COUNT(*) AS total, SUM(CASE WHEN r2_key IS NOT NULL AND length(r2_key) > 0 THEN 1 ELSE 0 END) AS r2_count FROM dataset_images;"
 if ($LASTEXITCODE -ne 0) { throw "D1 verification failed. GitHub dataset will NOT be deleted." }
 $verify = $verifyRaw | ConvertFrom-Json
 if ($verify -is [System.Array]) { $row = $verify[0].results[0] } else { $row = $verify.results[0] }
