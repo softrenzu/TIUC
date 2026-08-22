@@ -97,17 +97,25 @@
 <div class="step" data-step="1">
   <fieldset>
     <legend>1. 写真</legend>
-    <input id="file-src" type="file" accept="image/*" capture="environment">
-    <p class="status" id="src-status">未選択</p>
-    <div id="preview-src"></div>
+    <div class="file-input-group">
+      <button id="camera-btn-src" class="camera-btn">カメラを開始</button>
+      <button id="file-btn-src" class="file-btn">ファイルを選択</button>
+      <input id="file-src" type="file" accept="image/*" style="display:none;">
+      <p class="status" id="src-status">未選択</p>
+      <div id="preview-src"></div>
+    </div>
     <div class="toggle-row">
       <input type="checkbox" id="has-tgt">
       <label for="has-tgt">訳文が別の写真になっている</label>
     </div>
     <div id="tgt-wrap" hidden>
-      <input id="file-tgt" type="file" accept="image/*" capture="environment" style="margin-top:8px">
-      <p class="status" id="tgt-status">未選択</p>
-      <div id="preview-tgt"></div>
+      <div class="file-input-group">
+        <button id="camera-btn-tgt" class="camera-btn">カメラを開始</button>
+        <button id="file-btn-tgt" class="file-btn">ファイルを選択</button>
+        <input id="file-tgt" type="file" accept="image/*" style="display:none;">
+        <p class="status" id="tgt-status">未選択</p>
+        <div id="preview-tgt"></div>
+      </div>
     </div>
   </fieldset>
   <div class="step-nav">
