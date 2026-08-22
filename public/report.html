@@ -262,6 +262,20 @@ async function resize(file, maxEdge, quality) {
   return { blob, w, h };
 }
 
+function bindPhotoButtons(cameraBtnId, fileBtnId, inputId) {
+  const input = $(inputId);
+  $(cameraBtnId).addEventListener('click', () => {
+    input.setAttribute('capture', 'environment');
+    input.click();
+  });
+  $(fileBtnId).addEventListener('click', () => {
+    input.removeAttribute('capture');
+    input.click();
+  });
+}
+bindPhotoButtons('camera-btn-src', 'file-btn-src', 'file-src');
+bindPhotoButtons('camera-btn-tgt', 'file-btn-tgt', 'file-tgt');
+
 $('has-tgt').addEventListener('change', (e) => {
   $('tgt-wrap').hidden = !e.target.checked;
   if (!e.target.checked) {
