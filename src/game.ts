@@ -28,8 +28,36 @@ async function ensureCharacter(env: AppEnv, userId: string): Promise<number> {
     env.DB.prepare("INSERT INTO users (id, created_at) VALUES (?1,?2) ON CONFLICT(id) DO NOTHING").bind(userId, now),
     env.DB.prepare("INSERT INTO characters (user_id, created_at, updated_at) VALUES (?1,?2,?2) ON CONFLICT(user_id) DO NOTHING").bind(userId, now),
   ]);
-  const row = await env.DB.prepare("SELECT xp_total FROM characters WHERE user_id=?1").bind(userId).first<{xp_total:number}>();
-  return row?.xp_total ?? 0;
+
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO xp_events (user_id, kind, xp, source_key, created_at, note)
+     SELECT user_id,
+            'activity',
+            CASE kind
+              WHEN 'post_submit' THEN 5
+              WHEN 'judgment' THEN 2
+              WHEN 'correction_propose' THEN 3
+              WHEN 'correction_confirm_bonus' THEN 15
+              WHEN 'vote' THEN 2
+              WHEN 'adopt_bonus' THEN 30
+              ELSE 0
+            END,
+            'point:' || id,
+            created_at,
+            kind
+       FROM point_events
+      WHERE user_id=?1
+        AND kind IN ('post_submit','judgment','correction_propose','correction_confirm_bonus','vote','adopt_bonus')`
+  ).bind(userId).run();
+
+  const total = await env.DB.prepare(
+    "SELECT COALESCE(SUM(xp),0) AS total FROM xp_events WHERE user_id=?1"
+  ).bind(userId).first<{total:number}>();
+  const xpTotal = total?.total ?? 0;
+  await env.DB.prepare(
+    "UPDATE characters SET xp_total=?2,updated_at=?3 WHERE user_id=?1"
+  ).bind(userId, xpTotal, now).run();
+  return xpTotal;
 }
 
 export async function gameCharacter(request: Request, env: AppEnv): Promise<Response> {
@@ -42,15 +70,7 @@ export async function gameCharacter(request: Request, env: AppEnv): Promise<Resp
   const recent = await env.DB.prepare(
     "SELECT kind,xp,created_at,note FROM xp_events WHERE user_id=?1 ORDER BY created_at DESC,id DESC LIMIT 20"
   ).bind(userId).all();
-  return Response.json({
-    ok: true,
-    xp_total: xpTotal,
-    level,
-    stage: characterStage(level),
-    xp_into_level: xpTotal - base,
-    xp_for_next_level: next - base,
-    recent: recent.results,
-  });
+  return Response.json({ ok:true, xp_total:xpTotal, level, stage:characterStage(level), xp_into_level:xpTotal-base, xp_for_next_level:next-base, recent:recent.results });
 }
 
 type QuestDef = { id:string; title:string; desc:string; reward:number };
@@ -117,17 +137,15 @@ export async function gameClaimQuest(request: Request, env: AppEnv): Promise<Res
   await env.DB.batch([
     env.DB.prepare("INSERT INTO quest_claims (user_id,quest_id,claimed_at) VALUES (?1,?2,?3)").bind(userId,questId,now),
     env.DB.prepare("INSERT INTO xp_events (user_id,kind,xp,source_key,created_at,note) VALUES (?1,'quest',?2,?3,?4,?5)").bind(userId,q.reward,`quest:${questId}`,now,q.title),
-    env.DB.prepare("UPDATE characters SET xp_total=xp_total+?2,updated_at=?3 WHERE user_id=?1").bind(userId,q.reward,now),
   ]);
-  return Response.json({ ok:true, reward:q.reward });
+  const xpTotal = await ensureCharacter(env,userId);
+  return Response.json({ ok:true, reward:q.reward, xp_total:xpTotal });
 }
 
 export async function gameEncyclopedia(request: Request, env: AppEnv): Promise<Response> {
   const userId = String(new URL(request.url).searchParams.get("user_id") || "");
   if (!UUID_RE.test(userId)) return bad("ユーザーIDが不正です");
-  const rows = await env.DB.prepare(
-    "SELECT lang_pair,place_kind,COUNT(*) AS n FROM posts WHERE submitter_id=?1 AND place_kind<>'unknown' GROUP BY lang_pair,place_kind"
-  ).bind(userId).all();
+  const rows = await env.DB.prepare("SELECT lang_pair,place_kind,COUNT(*) AS n FROM posts WHERE submitter_id=?1 AND place_kind<>'unknown' GROUP BY lang_pair,place_kind").bind(userId).all();
   return Response.json({ ok:true, slots:rows.results, total:rows.results.length, max:12 });
 }
 
@@ -137,18 +155,8 @@ export async function gameImpact(request: Request, env: AppEnv): Promise<Respons
   const latest = await env.DB.prepare("SELECT mesh3 FROM posts WHERE submitter_id=?1 ORDER BY created_at DESC LIMIT 1").bind(userId).first<{mesh3:string}>();
   if (!latest) return Response.json({ ok:true, region:null });
   const since = Math.floor(Date.now()/1000) - 30*86400;
-  const stats = await env.DB.prepare(
-    `SELECT COUNT(*) AS posts,
-            SUM(status='confirmed') AS confirmed,
-            SUM(status='adopted') AS adopted,
-            COUNT(DISTINCT submitter_id) AS people
-       FROM posts WHERE mesh3=?1 AND created_at>=?2`
-  ).bind(latest.mesh3,since).first();
+  const stats = await env.DB.prepare(`SELECT COUNT(*) AS posts, SUM(status='confirmed') AS confirmed, SUM(status='adopted') AS adopted, COUNT(DISTINCT submitter_id) AS people FROM posts WHERE mesh3=?1 AND created_at>=?2`).bind(latest.mesh3,since).first();
   const mine = await env.DB.prepare("SELECT COUNT(*) AS n FROM posts WHERE mesh3=?1 AND submitter_id=?2 AND created_at>=?3").bind(latest.mesh3,userId,since).first<{n:number}>();
-  const ahead = await env.DB.prepare(
-    `SELECT COUNT(*) AS n FROM (
-       SELECT submitter_id,COUNT(*) c FROM posts WHERE mesh3=?1 AND created_at>=?2 GROUP BY submitter_id HAVING c>?3
-     )`
-  ).bind(latest.mesh3,since,mine?.n ?? 0).first<{n:number}>();
+  const ahead = await env.DB.prepare(`SELECT COUNT(*) AS n FROM (SELECT submitter_id,COUNT(*) c FROM posts WHERE mesh3=?1 AND created_at>=?2 GROUP BY submitter_id HAVING c>?3)`).bind(latest.mesh3,since,mine?.n ?? 0).first<{n:number}>();
   return Response.json({ ok:true, region:{ mesh3:latest.mesh3, ...stats, my_posts:mine?.n ?? 0, rank:(ahead?.n ?? 0)+1 } });
 }
