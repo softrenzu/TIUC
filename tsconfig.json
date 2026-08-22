@@ -13,5 +13,5 @@
 	"src/**/*.ts",
 	"public/**/*.d.ts",
 	"worker-configuration.d.ts"
-, "public/public/mesh.js.d.ts.ts"]
+, "public/public/mesh.js.d.ts"]
 }
