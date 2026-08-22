@@ -25,17 +25,14 @@
   #stats-row .n { font-size: 20px; font-weight: 700; color: var(--color-accent, #1a5c3a); }
   #stats-row .label { font-size: 11px; color: var(--muted); }
 
-  #modes { flex: none; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-  .mode-card { display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: var(--radius-card, 16px);
-               text-decoration: none; color: inherit; border: 1px solid var(--line); }
-  .mode-card .icon { font-size: 32px; flex: none; }
-  .mode-card .body { flex: 1; min-width: 0; }
-  .mode-card .title { font-size: 15px; font-weight: 700; }
-  .mode-card .desc { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  #modes { flex: none; padding: 16px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .mode-card { display: flex; flex-direction: column; align-items: center; justify-content: center;
+               gap: 6px; padding: 16px 6px; min-height: 88px; border-radius: var(--radius-card, 16px);
+               text-decoration: none; color: inherit; border: 1px solid var(--line); text-align: center; }
+  .mode-card .icon { font-size: 28px; line-height: 1; }
+  .mode-card .title { font-size: 12px; font-weight: 700; line-height: 1.3; }
   .mode-card.primary { background: var(--color-accent, #1a5c3a); color: #fff; border-color: var(--color-accent, #1a5c3a); }
-  .mode-card.primary .desc { color: #cfe3d8; }
   .mode-card.secondary { background: var(--color-secondary, #1a4d73); color: #fff; border-color: var(--color-secondary, #1a4d73); }
-  .mode-card.secondary .desc { color: #cfe0ea; }
   .mode-card.tertiary { background: #fff; }
   .mode-card.tertiary:active { background: #f4f4f2; }
 
@@ -66,24 +63,15 @@
 <div id="modes">
   <a href="report.html" class="mode-card primary">
     <span class="icon">📷</span>
-    <span class="body">
-      <span class="title">撮影投稿</span>
-      <span class="desc">街で見かけた外国語表記を撮るだけ。語学力は不要です</span>
-    </span>
+    <span class="title">撮影投稿</span>
   </a>
   <a href="menu.html" class="mode-card secondary">
     <span class="icon">🔍</span>
-    <span class="body">
-      <span class="title">キュレーション</span>
-      <span class="desc">違和感チェック・修正提案で投稿を育てる</span>
-    </span>
+    <span class="title">キュレーション</span>
   </a>
   <a href="map.html" class="mode-card tertiary">
     <span class="icon">🗺️</span>
-    <span class="body">
-      <span class="title">マップで見る</span>
-      <span class="desc">みんなの投稿状況を地図で確認</span>
-    </span>
+    <span class="title">マップで見る</span>
   </a>
 </div>
 
