@@ -1,91 +1,66 @@
-import { meshCodes, meshBounds } from "../public/mesh.js";
-
 // =====================================================================
 // TIUC: Today is under construction.
 // 街なか外国語表記キュレーションアプリ。ドメイン固有ロジックはここから。
 // 認証・R2画像配信・メッシュ計算などの土台はクビアカから[流用]。
 // =====================================================================
 
-const LANG_PAIRS = new Set(["ja-en", "ja-zh", "ja-ko"]);
-const PLACE_KINDS = new Set(["menu", "sign", "notice", "other"]);
-const POST_PLACE_KINDS = new Set([...PLACE_KINDS, "unknown"]);
-const LOC_SOURCES = new Set(["exif", "geolocation", "manual"]);
-const MAP_LEVELS = new Set(["mesh3", "mesh4", "mesh5"]);
-const SUBMODES = new Set(["quality", "judgment", "correction"]);
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+import { meshCodes, meshBounds } from "../public/mesh.js";
 
-const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
-const POST_HOURLY_LIMIT = 30;
-const JUDGE_HOURLY_LIMIT = 60;
-const CORRECT_HOURLY_LIMIT = 30;
-const VOTE_HOURLY_LIMIT = 60;
-const AUTH_SESSION_HOURS = 24 * 30;
-const OAUTH_STATE_TTL_SEC = 300;
+import {
+	AUTH_SESSION_HOURS,
+	CORRECT_HOURLY_LIMIT,
+	JUDGE_HOURLY_LIMIT,
+	JUDGMENT_THRESHOLD,
+	LANG_PAIRS,
+	LOC_SOURCES,
+	MAP_LEVELS,
+	MAX_IMAGE_BYTES,
+	OAUTH_STATE_TTL_SEC,
+	PLACE_KINDS,
+	POINTS_CORRECTION_CONFIRM_BONUS,
+	POINTS_CORRECTION_PROPOSE,
+	POINTS_JUDGMENT,
+	POINTS_POST_SUBMIT,
+	POINTS_VOTE,
+	POST_HOURLY_LIMIT,
+	POST_PLACE_KINDS,
+	SUBMODES,
+	UUID_RE,
+	VOTE_HOURLY_LIMIT,
+	VOTE_THRESHOLD,
+} from "./config";
 
-// ②違和感チェック・③修正案投票 とも、この人数の判定/票が集まった時点で
-// 多数決で自動的にステータスを遷移させる(rule9の適応難易度は後発機能。
-// MVPはこの固定しきい値で「割れたら人を増やす」設計だけ先に用意する)。
-const JUDGMENT_THRESHOLD = 2;
-const VOTE_THRESHOLD = 2;
+import {
+	b64url,
+	b64urlDecodeUtf8,
+	bad,
+	enc,
+	hmac,
+	readCookie,
+	sha256Short,
+} from "./utils";
 
-// ポイント経済(rule10: 投稿は小さく、確定・採用時に大きく)
-const POINTS_POST_SUBMIT = 2;
-const POINTS_JUDGMENT = 1;
-const POINTS_CORRECTION_PROPOSE = 3;
-const POINTS_CORRECTION_CONFIRM_BONUS = 15;
-const POINTS_VOTE = 1;
+type AppEnv = Env & {
+	AUTH_SECRET: string;
+	HASH_SALT?: string;
+	GOOGLE_CLIENT_ID?: string;
+	GOOGLE_CLIENT_SECRET?: string;
+};
 
-const bad = (error, status = 400) => Response.json({ ok: false, error }, { status });
+type CookieAttrs = "" | "; Secure";
 
-// =====================================================================
-// 小道具 [流用]
-// =====================================================================
-const enc = new TextEncoder();
-const dec = new TextDecoder();
-
-function b64url(bytes) {
-  return btoa(String.fromCharCode(...new Uint8Array(bytes)))
-    .replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
-}
-
-function b64urlDecodeUtf8(str) {
-  const bin = atob(str.replace(/-/g, "+").replace(/_/g, "/"));
-  const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
-  return dec.decode(bytes);
-}
-
-async function sha256Short(text) {
-  const buf = await crypto.subtle.digest("SHA-256", enc.encode(text));
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 32);
-}
-
-async function hmac(text, secret) {
-  const key = await crypto.subtle.importKey(
-    "raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
-  );
-  return b64url(await crypto.subtle.sign("HMAC", key, enc.encode(text)));
-}
-
-function readCookie(request, name) {
-  const raw = request.headers.get("cookie") || "";
-  for (const part of raw.split(";")) {
-    const [k, ...v] = part.trim().split("=");
-    if (k === name) return v.join("=");
-  }
-  return null;
-}
 
 // =====================================================================
 // ユーザー(市民)ログイン(任意)。ゲスト運用の上に追加するだけ [流用]
 // =====================================================================
-async function issueUserSession(userId, env) {
+async function issueUserSession(userId: string, env: AppEnv): Promise<string> {
   const payload = b64url(enc.encode(JSON.stringify({
     u: userId, exp: Math.floor(Date.now() / 1000) + AUTH_SESSION_HOURS * 3600,
   })));
   return `${payload}.${await hmac(payload, env.AUTH_SECRET)}`;
 }
 
-async function readUserSession(request, env) {
+async function readUserSession(request: Request, env: AppEnv): Promise<string | null> {
   const raw = readCookie(request, "uid");
   if (!raw) return null;
   const [payload, sig] = raw.split(".");
@@ -102,15 +77,15 @@ async function readUserSession(request, env) {
 }
 
 // 簡易な非線形レベルカーブ(表示用のみ。実効重みは levels テーブルで別管理) [流用]
-function pointsCostForLevel(level) {
+function pointsCostForLevel(level: number): number {
   return 4 + Math.floor((level - 1) / 3) * 2;
 }
-function pointsForLevel(level) {
+function pointsForLevel(level: number): number {
   let p = 0;
   for (let l = 1; l < level; l++) p += pointsCostForLevel(l);
   return p;
 }
-function levelFromPoints(pointsTotal) {
+function levelFromPoints(pointsTotal: number): number {
   let level = 1;
   while (pointsForLevel(level + 1) <= pointsTotal) level++;
   return level;
@@ -120,7 +95,7 @@ function levelFromPoints(pointsTotal) {
 // ①撮影投稿モード
 // =====================================================================
 
-async function createPost(request, env) {
+async function createPost(request: Request, env: AppEnv): Promise<Response> {
   const form = await request.formData();
 
   const userId = String(form.get("user_id") || "");
@@ -176,7 +151,7 @@ async function createPost(request, env) {
 
   const hourly = await env.DB.prepare(
     "SELECT COUNT(*) AS n FROM posts WHERE submitter_id = ?1 AND created_at > ?2 - 3600"
-  ).bind(userId, now).first();
+  ).bind(userId, now).first<{ n: number }>();
   if ((hourly?.n ?? 0) >= POST_HOURLY_LIMIT) {
     return bad("短時間の投稿が多すぎます。しばらく待ってから再度お試しください", 429);
   }
@@ -193,7 +168,7 @@ async function createPost(request, env) {
     env.PHOTOS.put(srcImageKey, srcFull.stream(), { httpMetadata: { contentType: "image/jpeg" } }),
     env.PHOTOS.put(srcThumbKey, srcThumb.stream(), { httpMetadata: { contentType: "image/jpeg" } }),
   ];
-  if (hasTgt) {
+  if (tgtFull instanceof File && tgtThumb instanceof File && tgtImageKey && tgtThumbKey) {
     puts.push(
       env.PHOTOS.put(tgtImageKey, tgtFull.stream(), { httpMetadata: { contentType: "image/jpeg" } }),
       env.PHOTOS.put(tgtThumbKey, tgtThumb.stream(), { httpMetadata: { contentType: "image/jpeg" } }),
@@ -246,7 +221,7 @@ async function createPost(request, env) {
 }
 
 // 近隣の既存投稿チェック(重複抑制の一次確認)。認証不要・読み取りのみ [流用]
-async function nearbyCheck(request, env) {
+async function nearbyCheck(request: Request, env: AppEnv): Promise<Response> {
   const sp = new URL(request.url).searchParams;
   const userId = String(sp.get("user_id") || "");
   if (!UUID_RE.test(userId)) return bad("ユーザーIDが不正です");
@@ -275,8 +250,8 @@ async function nearbyCheck(request, env) {
 
 // 投稿者本人による自己削除。誰も判定していない投稿のみ許可
 // (他の人が既に労力をかけたものを一方的に消させないため)
-async function deletePost(request, env) {
-  const body = await request.json();
+async function deletePost(request: Request, env: AppEnv): Promise<Response> {
+  const body = await request.json<Record<string, unknown>>();
   const userId = String(body.user_id || "");
   const postId = String(body.post_id || "");
   if (!UUID_RE.test(userId) || !postId) return bad("パラメータが不正です");
@@ -286,7 +261,15 @@ async function deletePost(request, env) {
             p.tgt_image_key, p.tgt_thumb_key,
             (SELECT COUNT(*) FROM judgments WHERE post_id = p.id) AS judge_n
        FROM posts p WHERE p.id = ?1`
-  ).bind(postId).first();
+  ).bind(postId).first<{
+    submitter_id: string;
+    status: string;
+    src_image_key: string;
+    src_thumb_key: string;
+    tgt_image_key: string | null;
+    tgt_thumb_key: string | null;
+    judge_n: number;
+  }>();
   if (!row) return bad("該当する投稿がありません", 404);
   if (row.submitter_id !== userId) return bad("この投稿は削除できません", 403);
   if (row.status !== "pending_judgment" || row.judge_n > 0) {
@@ -309,7 +292,7 @@ async function deletePost(request, env) {
 //   一タップ・キュー・重み。全体のスループットを決める配車弁。
 // =====================================================================
 
-async function judgeNext(request, env) {
+async function judgeNext(request: Request, env: AppEnv): Promise<Response> {
   const sp = new URL(request.url).searchParams;
   const userId = String(sp.get("user_id") || "");
   if (!UUID_RE.test(userId)) return bad("ユーザーIDが不正です");
@@ -346,8 +329,8 @@ async function judgeNext(request, env) {
   });
 }
 
-async function judgeSubmit(request, env) {
-  const body = await request.json();
+async function judgeSubmit(request: Request, env: AppEnv): Promise<Response> {
+  const body = await request.json<Record<string, unknown>>();
   const userId = String(body.user_id || "");
   const postId = String(body.post_id || "");
   const verdict = String(body.verdict || "");
@@ -358,7 +341,7 @@ async function judgeSubmit(request, env) {
   const now = Math.floor(Date.now() / 1000);
   const rate = await env.DB.prepare(
     "SELECT COUNT(*) AS n FROM judgments WHERE judge_id = ?1 AND created_at > ?2 - 3600"
-  ).bind(userId, now).first();
+  ).bind(userId, now).first<{ n: number }>();
   if ((rate?.n ?? 0) >= JUDGE_HOURLY_LIMIT) {
     return bad("短時間の判定が多すぎます。しばらく待ってから再度お試しください", 429);
   }
@@ -396,7 +379,7 @@ async function judgeSubmit(request, env) {
   const counts = await env.DB.prepare(
     `SELECT SUM(verdict = 'natural') AS natural, SUM(verdict = 'unnatural') AS unnatural
        FROM judgments WHERE post_id = ?1`
-  ).bind(postId).first();
+  ).bind(postId).first<{ natural: number | null; unnatural: number | null }>();
   const natural = counts?.natural ?? 0, unnatural = counts?.unnatural ?? 0;
 
   let transitionedTo = null;
@@ -415,7 +398,7 @@ async function judgeSubmit(request, env) {
 // ③正誤・修正・解説(バイリンガル専用サブモード)
 // =====================================================================
 
-async function correctNext(request, env) {
+async function correctNext(request: Request, env: AppEnv): Promise<Response> {
   const sp = new URL(request.url).searchParams;
   const userId = String(sp.get("user_id") || "");
   if (!UUID_RE.test(userId)) return bad("ユーザーIDが不正です");
@@ -448,8 +431,8 @@ async function correctNext(request, env) {
   });
 }
 
-async function correctSubmit(request, env) {
-  const body = await request.json();
+async function correctSubmit(request: Request, env: AppEnv): Promise<Response> {
+  const body = await request.json<Record<string, unknown>>();
   const userId = String(body.user_id || "");
   const postId = String(body.post_id || "");
   const verdict = String(body.verdict || "fix");
@@ -465,7 +448,7 @@ async function correctSubmit(request, env) {
   const now = Math.floor(Date.now() / 1000);
   const rate = await env.DB.prepare(
     "SELECT COUNT(*) AS n FROM corrections WHERE curator_id = ?1 AND created_at > ?2 - 3600"
-  ).bind(userId, now).first();
+  ).bind(userId, now).first<{ n: number }>();
   if ((rate?.n ?? 0) >= CORRECT_HOURLY_LIMIT) {
     return bad("短時間の提案が多すぎます。しばらく待ってから再度お試しください", 429);
   }
@@ -512,7 +495,7 @@ async function correctSubmit(request, env) {
   return Response.json({ ok: true, correction_id: correctionId, points: POINTS_CORRECTION_PROPOSE });
 }
 
-async function correctVoteNext(request, env) {
+async function correctVoteNext(request: Request, env: AppEnv): Promise<Response> {
   const sp = new URL(request.url).searchParams;
   const userId = String(sp.get("user_id") || "");
   if (!UUID_RE.test(userId)) return bad("ユーザーIDが不正です");
@@ -549,8 +532,8 @@ async function correctVoteNext(request, env) {
   });
 }
 
-async function correctVoteSubmit(request, env) {
-  const body = await request.json();
+async function correctVoteSubmit(request: Request, env: AppEnv): Promise<Response> {
+  const body = await request.json<Record<string, unknown>>();
   const userId = String(body.user_id || "");
   const correctionId = String(body.correction_id || "");
   const agree = body.agree ? 1 : 0;
@@ -560,7 +543,7 @@ async function correctVoteSubmit(request, env) {
   const now = Math.floor(Date.now() / 1000);
   const rate = await env.DB.prepare(
     "SELECT COUNT(*) AS n FROM votes WHERE voter_id = ?1 AND created_at > ?2 - 3600"
-  ).bind(userId, now).first();
+  ).bind(userId, now).first<{ n: number }>();
   if ((rate?.n ?? 0) >= VOTE_HOURLY_LIMIT) {
     return bad("短時間の投票が多すぎます。しばらく待ってから再度お試しください", 429);
   }
@@ -599,7 +582,7 @@ async function correctVoteSubmit(request, env) {
 
   const tally = await env.DB.prepare(
     "SELECT SUM(agree) AS agree_n, COUNT(*) AS total FROM votes WHERE correction_id = ?1"
-  ).bind(correctionId).first();
+  ).bind(correctionId).first<{ agree_n: number | null; total: number }>();
   const agreeN = tally?.agree_n ?? 0, total = tally?.total ?? 0, disagreeN = total - agreeN;
 
   let confirmed = false;
@@ -650,7 +633,7 @@ async function correctVoteSubmit(request, env) {
 // 公開マップ(認証不要)。メッシュ集計に加え、投稿直後から正確な座標付き
 // ピンを公開する(2026-08-22、rule1改定。店の採用を待たない)。
 // =====================================================================
-async function publicMap(request, env) {
+async function publicMap(request: Request, env: AppEnv): Promise<Response> {
   const sp = new URL(request.url).searchParams;
 
   const level = sp.get("level") || "mesh3";
@@ -672,7 +655,7 @@ async function publicMap(request, env) {
   if (!langPairs.length) return bad("lang_pair の指定が不正です");
   const langSql = langPairs.map((_, i) => `?${i + 5}`).join(",");
 
-  const cache = caches.default;
+  const cache = (caches as CacheStorage & { default: Cache }).default;
   const url = new URL(request.url);
   const cacheKey = new Request(url.toString(), { method: "GET" });
   const cached = await cache.match(cacheKey);
@@ -703,8 +686,24 @@ async function publicMap(request, env) {
 
   const bind = [minLat, maxLat, minLng, maxLng, ...langPairs];
   const [meshRows, pinRows] = await Promise.all([
-    env.DB.prepare(meshSql).bind(...bind).all(),
-    env.DB.prepare(pinSql).bind(...bind).all(),
+    env.DB.prepare(meshSql).bind(...bind).all<{
+      mesh: string;
+      post_count: number;
+      needs_fix_count: number;
+      confirmed_count: number;
+      last_post_at: number | null;
+    }>(),
+    env.DB.prepare(pinSql).bind(...bind).all<{
+      id: string;
+      lat: number;
+      lng: number;
+      lang_pair: string;
+      place_kind: string;
+      status: string;
+      original_text: string | null;
+      translated_text: string | null;
+      event_at: number;
+    }>(),
   ]);
 
   const features = [];
@@ -753,7 +752,7 @@ async function publicMap(request, env) {
 // =====================================================================
 // マイページ(本人の履歴)。user_id を知っていることのみを根拠に閲覧可 [流用]
 // =====================================================================
-async function mypage(request, env) {
+async function mypage(request: Request, env: AppEnv): Promise<Response> {
   const sp = new URL(request.url).searchParams;
   const userId = String(sp.get("user_id") || "");
   if (!UUID_RE.test(userId)) return bad("ユーザーIDが不正です");
@@ -762,7 +761,14 @@ async function mypage(request, env) {
     env.DB.prepare(
       `SELECT points_total, post_count, judged_count, corrected_count, adopted_count, streak_count
          FROM users WHERE id = ?1`
-    ).bind(userId).first(),
+    ).bind(userId).first<{
+      points_total: number;
+      post_count: number;
+      judged_count: number;
+      corrected_count: number;
+      adopted_count: number;
+      streak_count: number;
+    }>(),
     env.DB.prepare(
       `SELECT id, created_at, lang_pair, place_kind, situation, status, src_thumb_key,
               original_text, translated_text
@@ -805,11 +811,11 @@ async function mypage(request, env) {
 // =====================================================================
 // Google ログイン(任意。ゲストと並行して使える) [流用]
 // =====================================================================
-function googleRedirectUri(request) {
+function googleRedirectUri(request: Request): string {
   return new URL(request.url).origin + "/api/auth/google/callback";
 }
 
-async function googleAuthStart(request, env, cookieAttrs) {
+async function googleAuthStart(request: Request, env: AppEnv, cookieAttrs: CookieAttrs): Promise<Response> {
   const url = new URL(request.url);
   const userId = String(url.searchParams.get("user_id") || "");
   if (!UUID_RE.test(userId)) return bad("ユーザーIDが不正です");
@@ -835,7 +841,7 @@ async function googleAuthStart(request, env, cookieAttrs) {
   });
 }
 
-async function googleAuthCallback(request, env, cookieAttrs) {
+async function googleAuthCallback(request: Request, env: AppEnv, cookieAttrs: CookieAttrs): Promise<Response> {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const stateParam = url.searchParams.get("state");
@@ -851,26 +857,39 @@ async function googleAuthCallback(request, env, cookieAttrs) {
   const clearState = `oauth_state=; HttpOnly${cookieAttrs}; SameSite=Lax; ` +
     `Path=/api/auth/google; Max-Age=0`;
 
+  const googleClientId = env.GOOGLE_CLIENT_ID;
+  const googleClientSecret = env.GOOGLE_CLIENT_SECRET;
+  if (!googleClientId || !googleClientSecret) {
+    return bad("Googleログインは現在利用できません", 503);
+  }
+
   const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      client_id: env.GOOGLE_CLIENT_ID,
-      client_secret: env.GOOGLE_CLIENT_SECRET,
+      client_id: googleClientId,
+      client_secret: googleClientSecret,
       code,
       redirect_uri: googleRedirectUri(request),
       grant_type: "authorization_code",
     }),
   });
   if (!tokenRes.ok) return bad("Googleとの認証に失敗しました", 502);
-  const token = await tokenRes.json();
+  const token = await tokenRes.json() as {
+	access_token?: string;
+};
   if (!token.access_token) return bad("Googleとの認証に失敗しました", 502);
 
   const infoRes = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
     headers: { authorization: `Bearer ${token.access_token}` },
   });
   if (!infoRes.ok) return bad("Googleとの認証に失敗しました", 502);
-  const info = await infoRes.json();
+  const info = await infoRes.json() as {
+	sub?: string;
+	email?: string;
+	email_verified?: boolean;
+	name?: string;
+};
   const sub = String(info.sub || "");
   if (!sub) return bad("Googleとの認証に失敗しました", 502);
   const email = info.email ? String(info.email) : null;
@@ -880,9 +899,9 @@ async function googleAuthCallback(request, env, cookieAttrs) {
 
   const existing = await env.DB.prepare(
     "SELECT id FROM users WHERE google_sub = ?1"
-  ).bind(sub).first();
+  ).bind(sub).first<{ id: string }>();
 
-  let userId;
+  let userId: string;
   try {
     if (existing) {
       userId = existing.id;
@@ -920,7 +939,7 @@ async function googleAuthCallback(request, env, cookieAttrs) {
   return new Response(null, { status: 302, headers });
 }
 
-async function authMe(request, env) {
+async function authMe(request: Request, env: AppEnv): Promise<Response> {
   const userId = await readUserSession(request, env);
   if (!userId) return Response.json({ ok: false });
 
@@ -939,7 +958,7 @@ async function authMe(request, env) {
 // ルーティング
 // =====================================================================
 export default {
-  async fetch(request, env) {
+  async fetch(request: Request, env: AppEnv): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
     const cookieAttrs = url.protocol === "https:" ? "; Secure" : "";
@@ -1070,7 +1089,7 @@ export default {
       return new Response("not found", { status: 404 });
     } catch (e) {
       console.error(e);
-      return bad("サーバ側でエラーが発生しました: " + e.message, 500);
+      return bad("サーバ側でエラーが発生しました: " + (e instanceof Error ? e.message : String(e)), 500);
     }
   },
 };
