@@ -8,6 +8,39 @@
 // 投げない — ローカルのゲストIDのまま使い続けられ、フローは止まらない。
 
 const KEY = 'tiuc_user_id';
+const INTRO_SEEN_KEY = 'tiuc_intro_seen_v1';
+
+// 初回は説明トップを表示し、同じブラウザの2回目以降は /game を入口にする。
+// /game の「TIUCに戻る」から来た場合と ?intro=1 指定時は説明トップを再表示する。
+(function routeReturningVisitor() {
+  const path = window.location.pathname;
+  if (path !== '/' && path !== '/index.html') return;
+
+  const forceIntro = new URLSearchParams(window.location.search).get('intro') === '1';
+  let fromGame = false;
+
+  try {
+    if (document.referrer) {
+      const ref = new URL(document.referrer);
+      fromGame =
+        ref.origin === window.location.origin &&
+        (ref.pathname === '/game' || ref.pathname === '/game.html');
+    }
+  } catch {
+    // referrer を解釈できない場合は通常の訪問として扱う。
+  }
+
+  try {
+    const alreadySeen = localStorage.getItem(INTRO_SEEN_KEY) === '1';
+    if (alreadySeen && !forceIntro && !fromGame) {
+      window.location.replace('/game');
+      return;
+    }
+    localStorage.setItem(INTRO_SEEN_KEY, '1');
+  } catch {
+    // localStorage が使えない場合は従来通りトップページを表示する。
+  }
+})();
 
 export function getUserId() {
   let id = localStorage.getItem(KEY);
